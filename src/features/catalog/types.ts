@@ -1,0 +1,80 @@
+// Catalog domain types. Pure — safe in both Client and Server Components.
+//
+// MONEY: every monetary value is an integer number of paise (1 INR = 100 paise)
+// and is suffixed `Minor`. Never store rupees as a float.
+
+export const CURRENCY = 'INR';
+
+/** Supplier/fulfilment metadata. Dropshipping-specific, admin-only — never sent to the storefront. */
+export interface SupplierInfo {
+  name: string;
+  sku: string;
+  url?: string;
+  /** Landed cost we pay the supplier, in paise. Used for margin reporting. */
+  costPriceMinor: number;
+  /** Supplier dispatch lead time, in days. Drives the delivery estimate shown at checkout. */
+  leadTimeDays: number;
+}
+
+export interface Product {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  currency: string;
+  isActive: boolean;
+  /** GST rate applied to this product, e.g. 18 for 18%. Prices are GST-inclusive. */
+  gstRatePercent: number;
+  /** HSN code — required on a compliant Indian GST invoice. */
+  hsnCode?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Every product has at least one variant, even single-SKU products (a "Default"
+ * variant is created automatically). Price, stock, weight, and supplier all live
+ * here so cart/order/stock logic never needs a product-or-variant branch.
+ */
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  /** Human label, e.g. "Coal Black / 1kg". "Default" for single-SKU products. */
+  name: string;
+  sku: string;
+  priceMinor: number;
+  compareAtPriceMinor?: number;
+  /** Units on hand. Decremented atomically at order placement. */
+  stockQty: number;
+  /** Allow selling below zero stock (supplier-backed products with reliable restock). */
+  allowBackorder: boolean;
+  weightGrams: number;
+  supplier: SupplierInfo;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface ProductImage {
+  id: string;
+  productId: string;
+  url: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+  sortOrder: number;
+}
+
+export interface ProductSpecification {
+  id: string;
+  productId: string;
+  heading: string;
+  sortOrder: number;
+}
+
+export interface ProductSpecificationRow {
+  id: string;
+  specificationId: string;
+  label: string;
+  value: string;
+  sortOrder: number;
+}

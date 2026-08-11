@@ -1,5 +1,9 @@
 # Vero Goods --- Next.js E-commerce Application
 
+> This document is the product specification.
+> For installation, environment variables, payments/webhook configuration and
+> deployment, see [SETUP.md](SETUP.md).
+
 ## Purpose
 
 Build a clean, minimal e-commerce application with two areas:

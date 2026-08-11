@@ -1,0 +1,20 @@
+import type { MetadataRoute } from 'next';
+import { appUrl } from '@/shared/lib/config';
+import { getActiveProductSlugs } from '@/features/catalog/server/products.repo';
+
+export const revalidate = 3600;
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const base = appUrl();
+  const products = await getActiveProductSlugs();
+
+  return [
+    { url: base, lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
+    ...products.map((product) => ({
+      url: `${base}/products/${product.slug}`,
+      lastModified: new Date(product.updatedAt),
+      changeFrequency: 'weekly' as const,
+      priority: 0.8,
+    })),
+  ];
+}
