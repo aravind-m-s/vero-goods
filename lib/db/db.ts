@@ -19,7 +19,7 @@ import { OrderStatus, PaymentStatus } from './types';
 // Initial Mock Seed Data
 const getInitialDbState = (): DatabaseSchema => {
   const now = new Date().toISOString();
-  
+
   const mockProducts: Product[] = [
     {
       id: 'p-1',
@@ -163,6 +163,9 @@ const getInitialDbState = (): DatabaseSchema => {
 
 export async function getDb(): Promise<DatabaseSchema> {
   const client = await clientPromise;
+  if (!client) {
+    throw new Error("Database client is not initialized.");
+  }
   const db = client.db();
 
   // Helper to fetch collection or seed it if empty
@@ -204,6 +207,9 @@ export async function getDb(): Promise<DatabaseSchema> {
 
 export async function saveDb(schema: DatabaseSchema): Promise<void> {
   const client = await clientPromise;
+  if (!client) {
+    throw new Error("Database client is not initialized.");
+  }
   const db = client.db();
 
   const saveCollection = async <T extends { id?: string }>(collectionName: string, data: T[]) => {
