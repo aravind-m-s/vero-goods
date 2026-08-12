@@ -7,6 +7,7 @@ import { Label } from '@/shared/ui/label';
 import { Input } from '@/shared/ui/input';
 import { Button } from '@/shared/ui/button';
 import { useToast } from '@/shared/ui/toast';
+import { ThemeToggle } from '@/shared/ui/theme-toggle';
 import { ShieldCheck, Lock, AlertCircle } from 'lucide-react';
 
 function AdminLoginForm() {
@@ -49,15 +50,20 @@ function AdminLoginForm() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0b0b0d] px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-surface-sunken px-4">
+      {/* This page sits outside both shells, so it carries its own picker. */}
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
+
       <div className="w-full max-w-sm">
-        <Card className="border-white/10 bg-[#141417] text-white shadow-overlay">
+        <Card className="border-line bg-surface-raised text-ink shadow-overlay">
           <CardHeader className="text-center space-y-2">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-accent-border bg-accent-soft">
               <ShieldCheck className="h-6 w-6 text-accent" />
             </div>
-            <CardTitle className="text-base text-white">Admin Portal Access</CardTitle>
-            <CardDescription className="text-xs text-white/50">
+            <CardTitle className="text-base text-ink">Admin Portal Access</CardTitle>
+            <CardDescription className="text-xs text-ink-subtle">
               Vero Goods administrator control center. Please enter password.
             </CardDescription>
           </CardHeader>
@@ -72,10 +78,10 @@ function AdminLoginForm() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter admin password..."
-                    className="border-white/15 bg-black/40 pl-10 text-white placeholder:text-white/30"
+                    className="pl-10"
                     required
                   />
-                  <Lock className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-white/40" />
+                  <Lock className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-ink-subtle" />
                 </div>
               </div>
 
@@ -95,8 +101,8 @@ function AdminLoginForm() {
               </Button>
             </form>
 
-            <p className="mt-6 text-center text-3xs text-white/40">
-              Set by <code className="rounded bg-black/40 px-1 py-0.5 font-mono text-white/70">ADMIN_PASSWORD_HASH</code>.
+            <p className="mt-6 text-center text-3xs text-ink-subtle">
+              Set by <code className="rounded bg-surface-sunken px-1 py-0.5 font-mono text-ink-muted">ADMIN_PASSWORD_HASH</code>.
               Five failed attempts locks this IP out for 15 minutes.
             </p>
           </CardContent>

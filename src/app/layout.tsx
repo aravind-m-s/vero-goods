@@ -1,7 +1,9 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import '@/shared/styles/globals.css';
 import { appUrl } from '@/shared/lib/config';
+import { ThemeProvider } from '@/shared/theme/ThemeProvider';
+import { THEME_INIT_SCRIPT } from '@/shared/theme/theme';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -34,11 +36,32 @@ export const metadata: Metadata = {
   twitter: { card: 'summary_large_image' },
 };
 
+// Tints the browser chrome (Android address bar, iOS PWA header) to match the
+// page, so the theme does not stop at the edge of the viewport. These are the
+// --surface-sunken values from globals.css.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f7f6f4' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0b0d' },
+  ],
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-IN" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    // suppressHydrationWarning: the inline script below sets data-theme on this
+    // element before React hydrates, and the DOM must win over the server markup.
+    <html
+      lang="en-IN"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
+      <head>
+        {/* Runs synchronously during HTML parsing, before the first paint, so a
+            visitor who chose dark never sees a flash of the light theme. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="flex min-h-full flex-col bg-surface-sunken text-ink">
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

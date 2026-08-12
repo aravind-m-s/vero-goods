@@ -2,7 +2,8 @@
 
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
-import { Check, Minus, Plus, ShieldCheck, ShoppingCart, Truck } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Check, Minus, Plus, ShieldCheck, ShoppingCart, Truck, Zap } from 'lucide-react';
 import { useCart } from '@/features/cart/components/CartContext';
 import type { ProductImage, ProductVariant } from '@/features/catalog/types';
 import { Badge } from '@/shared/ui/badge';
@@ -20,7 +21,8 @@ interface ProductActionsProps {
 const MAX_PER_ORDER = 20;
 
 export function ProductActions({ productTitle, images, variants }: ProductActionsProps) {
-  const { addToCart } = useCart();
+  const router = useRouter();
+  const { addToCart, startDirectBuy } = useCart();
   const { success, error } = useToast();
 
   const sellable = useMemo(() => variants.filter((variant) => variant.isActive), [variants]);
@@ -64,6 +66,17 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
     success(
       `${productTitle}${selected.name === 'Default' ? '' : ` · ${selected.name}`} added to cart`
     );
+  };
+
+  // Straight to checkout with this item alone. Nothing is written to the cart,
+  // so an existing cart is neither charged for nor lost.
+  const handleBuyNow = () => {
+    if (!purchasable) {
+      error('This option is out of stock');
+      return;
+    }
+    startDirectBuy(selected.id, quantity);
+    router.push('/checkout');
   };
 
   return (
@@ -173,38 +186,54 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
 
         <StockLine variant={selected} />
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex h-12 w-fit items-center rounded-control border border-line-strong">
-            <button
-              type="button"
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              disabled={quantity <= 1}
-              aria-label="Decrease quantity"
-              className="cursor-pointer px-3.5 py-3 text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+        {/* Stepper and Add to cart share one row at every width — stacking them
+            on mobile left a stubby quantity box floating above a full-width
+            button. Buy now sits below, full width, where a thumb reaches. */}
+        <div className="space-y-3">
+          <div className="flex items-stretch gap-3">
+            <div className="flex h-12 shrink-0 items-center rounded-control border border-line-strong">
+              <button
+                type="button"
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                disabled={quantity <= 1}
+                aria-label="Decrease quantity"
+                className="cursor-pointer px-3.5 py-3 text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <span className="w-8 text-center text-sm font-bold tabular-nums">{quantity}</span>
+              <button
+                type="button"
+                onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
+                disabled={quantity >= maxQuantity}
+                aria-label="Increase quantity"
+                className="cursor-pointer px-3.5 py-3 text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handleAdd}
+              disabled={!purchasable}
+              className="min-w-0 flex-1"
             >
-              <Minus className="h-4 w-4" />
-            </button>
-            <span className="w-8 text-center text-sm font-bold tabular-nums">{quantity}</span>
-            <button
-              type="button"
-              onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
-              disabled={quantity >= maxQuantity}
-              aria-label="Increase quantity"
-              className="cursor-pointer px-3.5 py-3 text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
+              <ShoppingCart className="h-4 w-4 shrink-0" />
+              <span className="truncate">{purchasable ? 'Add to cart' : 'Out of stock'}</span>
+            </Button>
           </div>
 
           <Button
             variant="accent"
             size="lg"
-            onClick={handleAdd}
+            onClick={handleBuyNow}
             disabled={!purchasable}
-            className="flex-1"
+            className="w-full"
           >
-            <ShoppingCart className="h-4 w-4" />
-            {purchasable ? 'Add to cart' : 'Out of stock'}
+            <Zap className="h-4 w-4 shrink-0" />
+            Buy now · {formatMinor(selected.priceMinor * quantity)}
           </Button>
         </div>
 

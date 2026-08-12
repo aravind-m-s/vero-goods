@@ -10,10 +10,10 @@ const GUARANTEES = [
 ];
 
 /**
- * Trust rail (light — still content) followed by the footer band (graphite —
- * chrome). Together with the utility strip in the header these are the only
- * two dark surfaces in the storefront: they bookend the page rather than
- * interrupting it.
+ * Trust rail (content, on the page surface) followed by the footer band
+ * (graphite — chrome). Together with the utility strip in the header these are
+ * the only two band surfaces in the storefront: they bookend the page rather
+ * than interrupting it, and stay graphite in both colour schemes.
  */
 export function Footer() {
   return (
@@ -35,7 +35,7 @@ export function Footer() {
         </div>
       </section>
 
-      <div className="bg-surface-inverse text-ink-inverse">
+      <div className="bg-band text-band-ink">
         <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-12 sm:px-6 lg:flex-row lg:justify-between lg:px-8">
           <div className="max-w-xs">
             <div className="flex items-center gap-2">
@@ -74,7 +74,7 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-white/10">
+        <div className="border-t border-band-line">
           <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-2xs opacity-50 sm:flex-row sm:px-6 lg:px-8">
             <p>&copy; {new Date().getFullYear()} Vero Goods. All prices include GST.</p>
             <p>Delivery within India only.</p>

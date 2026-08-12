@@ -17,7 +17,7 @@ const VARIANTS: Record<NonNullable<ButtonProps['variant']>, string> = {
     'border border-line-strong bg-surface-raised text-ink hover:bg-surface-sunken hover:border-ink-subtle',
   secondary: 'bg-surface-sunken text-ink hover:bg-line',
   ghost: 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
-  danger: 'bg-danger text-white hover:opacity-90 shadow-card active:translate-y-px',
+  danger: 'bg-danger text-on-danger hover:opacity-90 shadow-card active:translate-y-px',
   link: 'text-accent underline underline-offset-4 hover:text-accent-hover',
 };
 

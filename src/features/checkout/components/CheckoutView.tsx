@@ -56,7 +56,18 @@ declare global {
 
 export function CheckoutView() {
   const router = useRouter();
-  const { lines, totals, cartCount, clearCart, refreshQuote, isHydrated, isPricing } = useCart();
+  // Checkout buys whatever the cart context says is being bought — the cart, or
+  // a single "buy now" item that never entered it.
+  const {
+    checkoutLines: lines,
+    checkoutTotals: totals,
+    checkoutCount: cartCount,
+    isCheckoutPricing: isPricing,
+    isDirectBuy,
+    clearPurchased,
+    refreshQuote,
+    isHydrated,
+  } = useCart();
   const { success: showSuccess, error: showError } = useToast();
 
   const [customer, setCustomer] = useState<{ email: string; name: string; phone: string } | null>(
@@ -174,7 +185,7 @@ export function CheckoutView() {
   };
 
   const goToSuccess = (trackingToken: string, orderNumber: string) => {
-    clearCart();
+    clearPurchased();
     router.push(`/order/success?token=${trackingToken}&orderNumber=${orderNumber}`);
   };
 
@@ -545,6 +556,11 @@ export function CheckoutView() {
             <Card>
               <CardHeader>
                 <CardTitle>Order summary</CardTitle>
+                {isDirectBuy && (
+                  <p className="mt-1 text-2xs text-ink-subtle">
+                    Buying this item directly — anything in your cart is left untouched.
+                  </p>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-3">
@@ -684,7 +700,7 @@ function Step({
         className={cn(
           'flex h-5 w-5 items-center justify-center rounded-full text-3xs',
           done
-            ? 'bg-success text-white'
+            ? 'bg-success text-on-success'
             : active
               ? 'bg-accent text-on-accent'
               : 'bg-surface-sunken text-ink-subtle'

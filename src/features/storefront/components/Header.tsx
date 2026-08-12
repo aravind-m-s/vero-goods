@@ -6,6 +6,7 @@ import { LogOut, Menu, ShoppingBag, User, X } from 'lucide-react';
 import { CartDrawer } from '@/features/cart/components/CartDrawer';
 import { useCart } from '@/features/cart/components/CartContext';
 import { Button } from '@/shared/ui/button';
+import { ThemeToggle } from '@/shared/ui/theme-toggle';
 import { cn } from '@/shared/lib/utils';
 
 const NAV = [
@@ -50,7 +51,7 @@ export function Header() {
     <>
       {/* Value-proposition strip. On a storefront reached from an ad, this is
           the first thing that answers "can I trust this shop?". */}
-      <div className="bg-surface-inverse text-ink-inverse">
+      <div className="bg-band text-band-ink">
         <div className="mx-auto flex h-9 max-w-7xl items-center justify-center gap-6 px-4 text-2xs font-medium sm:px-6 lg:px-8">
           <span>Free shipping over ₹2,000</span>
           <span aria-hidden="true" className="opacity-30">·</span>
@@ -94,6 +95,8 @@ export function Header() {
           </nav>
 
           <div className="ml-auto flex items-center gap-1">
+            <ThemeToggle />
+
             {customer ? (
               <div className="flex items-center gap-1">
                 <span className="hidden max-w-[140px] items-center gap-1.5 truncate px-2 text-xs text-ink-muted lg:flex">
@@ -127,7 +130,7 @@ export function Header() {
           aria-label="Mobile"
           className={cn(
             'overflow-hidden border-t border-line transition-[max-height] duration-200 md:hidden',
-            isMenuOpen ? 'max-h-64' : 'max-h-0 border-t-0'
+            isMenuOpen ? 'max-h-80' : 'max-h-0 border-t-0'
           )}
         >
           <div className="flex flex-col p-2">
@@ -141,6 +144,13 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
+
+            {/* Spelled out on mobile: the labelled control is clearer than an
+                icon when there is room for it. */}
+            <div className="mt-1 flex items-center justify-between border-t border-line px-3 pt-3">
+              <span className="text-sm font-medium text-ink-muted">Theme</span>
+              <ThemeToggle variant="segmented" />
+            </div>
           </div>
         </nav>
       </header>
