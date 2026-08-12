@@ -11,97 +11,312 @@
      surface / surface-raised / surface-sunken   backgrounds, back to front
      ink / ink-muted / ink-subtle                text, strongest to weakest
      line / line-strong                          borders
+     band / band-ink                             the two dark bookend strips
+                                                 (header utility bar, footer)
+     sidebar-*                                   admin chrome
      accent*                                     the single brand colour, used
                                                  only for actions and prices
+
+   Both palettes are declared once each, as --l-* (light) and --d-* (dark).
+   The blocks below only *point* the semantic tokens at one of the two sets,
+   so a value can never drift between schemes.
+
+   Scheme resolution, in priority order:
+     1. :root[data-theme='dark' | 'light']   explicit user choice
+     2. prefers-color-scheme                 the OS setting ("system", default)
+   The inline script in app/layout.tsx sets the attribute before first paint,
+   so there is no flash and no-JS visitors still get the OS scheme.
    ========================================================================== */
 
 :root {
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
-  --surface-sunken: #fafaf9;
-  --surface-inverse: #18181b;
+  /* ---------------- Light palette ---------------- */
+  --l-surface: #ffffff;
+  --l-surface-raised: #ffffff;
+  --l-surface-sunken: #f7f6f4;
+  --l-surface-inverse: #1a1917;
 
-  --ink: #18181b;
-  --ink-muted: #52525b;
-  --ink-subtle: #a1a1aa;
-  --ink-inverse: #fafafa;
+  --l-ink: #1a1917;
+  --l-ink-muted: #57534e;
+  /* 4.6:1 on the sunken surface. The old #a1a1aa sat at 2.6:1 and failed for
+     the small print it was used on. */
+  --l-ink-subtle: #79736d;
+  --l-ink-inverse: #fafaf9;
 
-  --line: #e7e5e4;
-  --line-strong: #d6d3d1;
+  --l-line: #e9e6e2;
+  --l-line-strong: #d6d2cc;
 
-  /* Signal orange. Reserved for CTAs, prices and discount badges — if it is
-     orange, it is either money or something you can click. */
-  --accent: #ea580c;
-  --accent-hover: #c2410c;
-  --accent-soft: #fff7ed;
-  --accent-border: #fed7aa;
-  --accent-ink: #9a3412;
-  --on-accent: #ffffff;
+  --l-band: #1a1917;
+  --l-band-ink: #f5f4f2;
 
-  --success: #059669;
-  --success-soft: #ecfdf5;
-  --success-border: #a7f3d0;
+  --l-accent: #ea580c;
+  --l-accent-hover: #c2410c;
+  --l-accent-soft: #fff5ec;
+  --l-accent-border: #fdd3ac;
+  --l-accent-ink: #9a3412;
+  --l-on-accent: #ffffff;
 
-  --warning: #d97706;
-  --warning-soft: #fffbeb;
-  --warning-border: #fde68a;
+  /* Darkened from #059669: white-on-success is a filled badge in checkout and
+     needed 4.5:1. */
+  --l-success: #047857;
+  --l-success-soft: #ecfdf5;
+  --l-success-border: #a7f3d0;
+  --l-on-success: #ffffff;
 
-  --danger: #dc2626;
-  --danger-soft: #fef2f2;
-  --danger-border: #fecaca;
+  --l-warning: #b45309;
+  --l-warning-soft: #fffbeb;
+  --l-warning-border: #fde3a3;
 
-  --focus: #ea580c;
+  --l-danger: #dc2626;
+  --l-danger-soft: #fef2f2;
+  --l-danger-border: #fecaca;
+  --l-on-danger: #ffffff;
+
+  --l-focus: #ea580c;
+
+  --l-sidebar: #ffffff;
+  --l-sidebar-line: #e9e6e2;
+  --l-sidebar-ink: #57534e;
+  --l-sidebar-ink-strong: #1a1917;
+  --l-sidebar-ink-faint: #a8a29e;
+  --l-sidebar-hover: #f5f4f2;
+  --l-sidebar-active: #efedea;
+
+  --l-shadow-sm: 0 1px 2px 0 rgb(26 25 23 / 0.05);
+  --l-shadow-md: 0 4px 12px -2px rgb(26 25 23 / 0.08), 0 2px 4px -2px rgb(26 25 23 / 0.04);
+  --l-shadow-lg: 0 16px 40px -12px rgb(26 25 23 / 0.18);
+
+  /* ---------------- Dark palette ----------------
+     Lifted off pure black: #000 next to a real shadow reads as a hole rather
+     than a surface, and elevation stops being legible. */
+  --d-surface: #121215;
+  --d-surface-raised: #1a1a1f;
+  --d-surface-sunken: #0b0b0d;
+  --d-surface-inverse: #f4f4f5;
+
+  --d-ink: #f4f4f5;
+  --d-ink-muted: #a5a5ae;
+  --d-ink-subtle: #7b7b85;
+  --d-ink-inverse: #18181b;
+
+  --d-line: #26262c;
+  --d-line-strong: #3a3a42;
+
+  /* The bookend bands stay graphite in dark mode — flipping them to white would
+     make the brightest thing on the page a footer. Both of them sit directly
+     against --surface-raised (the header bar, the trust rail), so the band has
+     to read as clearly *below* that, not beside it. */
+  --d-band: #08080a;
+  --d-band-ink: #e4e4e7;
+
+  /* Lifted a step: #ea580c does not carry enough luminance against a near-black
+     surface to stay legible. */
+  --d-accent: #fb7a3c;
+  --d-accent-hover: #fd9560;
+  --d-accent-soft: #2a1509;
+  --d-accent-border: #7c2d12;
+  --d-accent-ink: #fdba74;
+  --d-on-accent: #1a0d05;
+
+  --d-success: #34d399;
+  --d-success-soft: #062b20;
+  --d-success-border: #065f46;
+  /* Filled success/danger chips carry dark text in dark mode — white on a
+     lifted green or red drops to ~2:1. */
+  --d-on-success: #04231a;
+
+  --d-warning: #fbbf24;
+  --d-warning-soft: #2a1f05;
+  --d-warning-border: #78350f;
+
+  --d-danger: #f87171;
+  --d-danger-soft: #2a0e0e;
+  --d-danger-border: #7f1d1d;
+  --d-on-danger: #290a0a;
+
+  --d-focus: #fb7a3c;
+
+  --d-sidebar: #141418;
+  --d-sidebar-line: #26262c;
+  --d-sidebar-ink: #a5a5ae;
+  --d-sidebar-ink-strong: #fafafa;
+  --d-sidebar-ink-faint: #6f6f79;
+  --d-sidebar-hover: #1e1e24;
+  --d-sidebar-active: #2a2a32;
+
+  --d-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --d-shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.5);
+  --d-shadow-lg: 0 16px 40px -12px rgb(0 0 0 / 0.7);
+
+  /* ---------------- Scheme-independent ---------------- */
+  --band-line: rgb(255 255 255 / 0.1);
 
   --radius: 0.625rem;
   --radius-sm: 0.375rem;
   --radius-lg: 1rem;
-
-  --shadow-sm: 0 1px 2px 0 rgb(24 24 27 / 0.05);
-  --shadow-md: 0 4px 12px -2px rgb(24 24 27 / 0.08), 0 2px 4px -2px rgb(24 24 27 / 0.04);
-  --shadow-lg: 0 16px 40px -12px rgb(24 24 27 / 0.18);
 }
 
+/* Light is the default and the explicit choice. `color-scheme` is what makes
+   native widgets — date pickers, select popups, scrollbars — match. */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --surface: var(--l-surface);
+  --surface-raised: var(--l-surface-raised);
+  --surface-sunken: var(--l-surface-sunken);
+  --surface-inverse: var(--l-surface-inverse);
+
+  --ink: var(--l-ink);
+  --ink-muted: var(--l-ink-muted);
+  --ink-subtle: var(--l-ink-subtle);
+  --ink-inverse: var(--l-ink-inverse);
+
+  --line: var(--l-line);
+  --line-strong: var(--l-line-strong);
+
+  --band: var(--l-band);
+  --band-ink: var(--l-band-ink);
+
+  --accent: var(--l-accent);
+  --accent-hover: var(--l-accent-hover);
+  --accent-soft: var(--l-accent-soft);
+  --accent-border: var(--l-accent-border);
+  --accent-ink: var(--l-accent-ink);
+  --on-accent: var(--l-on-accent);
+
+  --success: var(--l-success);
+  --success-soft: var(--l-success-soft);
+  --success-border: var(--l-success-border);
+  --on-success: var(--l-on-success);
+  --warning: var(--l-warning);
+  --warning-soft: var(--l-warning-soft);
+  --warning-border: var(--l-warning-border);
+  --danger: var(--l-danger);
+  --danger-soft: var(--l-danger-soft);
+  --danger-border: var(--l-danger-border);
+  --on-danger: var(--l-on-danger);
+
+  --focus: var(--l-focus);
+
+  --sidebar: var(--l-sidebar);
+  --sidebar-line: var(--l-sidebar-line);
+  --sidebar-ink: var(--l-sidebar-ink);
+  --sidebar-ink-strong: var(--l-sidebar-ink-strong);
+  --sidebar-ink-faint: var(--l-sidebar-ink-faint);
+  --sidebar-hover: var(--l-sidebar-hover);
+  --sidebar-active: var(--l-sidebar-active);
+
+  --shadow-sm: var(--l-shadow-sm);
+  --shadow-md: var(--l-shadow-md);
+  --shadow-lg: var(--l-shadow-lg);
+}
+
+/* The explicit dark choice. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --surface: var(--d-surface);
+  --surface-raised: var(--d-surface-raised);
+  --surface-sunken: var(--d-surface-sunken);
+  --surface-inverse: var(--d-surface-inverse);
+
+  --ink: var(--d-ink);
+  --ink-muted: var(--d-ink-muted);
+  --ink-subtle: var(--d-ink-subtle);
+  --ink-inverse: var(--d-ink-inverse);
+
+  --line: var(--d-line);
+  --line-strong: var(--d-line-strong);
+
+  --band: var(--d-band);
+  --band-ink: var(--d-band-ink);
+
+  --accent: var(--d-accent);
+  --accent-hover: var(--d-accent-hover);
+  --accent-soft: var(--d-accent-soft);
+  --accent-border: var(--d-accent-border);
+  --accent-ink: var(--d-accent-ink);
+  --on-accent: var(--d-on-accent);
+
+  --success: var(--d-success);
+  --success-soft: var(--d-success-soft);
+  --success-border: var(--d-success-border);
+  --on-success: var(--d-on-success);
+  --warning: var(--d-warning);
+  --warning-soft: var(--d-warning-soft);
+  --warning-border: var(--d-warning-border);
+  --danger: var(--d-danger);
+  --danger-soft: var(--d-danger-soft);
+  --danger-border: var(--d-danger-border);
+  --on-danger: var(--d-on-danger);
+
+  --focus: var(--d-focus);
+
+  --sidebar: var(--d-sidebar);
+  --sidebar-line: var(--d-sidebar-line);
+  --sidebar-ink: var(--d-sidebar-ink);
+  --sidebar-ink-strong: var(--d-sidebar-ink-strong);
+  --sidebar-ink-faint: var(--d-sidebar-ink-faint);
+  --sidebar-hover: var(--d-sidebar-hover);
+  --sidebar-active: var(--d-sidebar-active);
+
+  --shadow-sm: var(--d-shadow-sm);
+  --shadow-md: var(--d-shadow-md);
+  --shadow-lg: var(--d-shadow-lg);
+}
+
+/* "System": no attribute, so the OS decides. The :not() guard is what lets an
+   explicit light choice win on a machine set to dark. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #0b0b0d;
-    --surface-raised: #141417;
-    --surface-sunken: #08080a;
-    --surface-inverse: #fafafa;
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
 
-    --ink: #fafafa;
-    --ink-muted: #a1a1aa;
-    --ink-subtle: #71717a;
-    --ink-inverse: #18181b;
+    --surface: var(--d-surface);
+    --surface-raised: var(--d-surface-raised);
+    --surface-sunken: var(--d-surface-sunken);
+    --surface-inverse: var(--d-surface-inverse);
 
-    --line: #27272a;
-    --line-strong: #3f3f46;
+    --ink: var(--d-ink);
+    --ink-muted: var(--d-ink-muted);
+    --ink-subtle: var(--d-ink-subtle);
+    --ink-inverse: var(--d-ink-inverse);
 
-    /* Lifted a step in dark mode: #ea580c does not carry enough luminance
-       against a near-black surface to stay legible. */
-    --accent: #fb7534;
-    --accent-hover: #fd8c53;
-    --accent-soft: #2a1408;
-    --accent-border: #7c2d12;
-    --accent-ink: #fdba74;
-    --on-accent: #1a0d05;
+    --line: var(--d-line);
+    --line-strong: var(--d-line-strong);
 
-    --success: #34d399;
-    --success-soft: #052e21;
-    --success-border: #065f46;
+    --band: var(--d-band);
+    --band-ink: var(--d-band-ink);
 
-    --warning: #fbbf24;
-    --warning-soft: #2a1f05;
-    --warning-border: #78350f;
+    --accent: var(--d-accent);
+    --accent-hover: var(--d-accent-hover);
+    --accent-soft: var(--d-accent-soft);
+    --accent-border: var(--d-accent-border);
+    --accent-ink: var(--d-accent-ink);
+    --on-accent: var(--d-on-accent);
 
-    --danger: #f87171;
-    --danger-soft: #2a0d0d;
-    --danger-border: #7f1d1d;
+    --success: var(--d-success);
+    --success-soft: var(--d-success-soft);
+    --success-border: var(--d-success-border);
+    --warning: var(--d-warning);
+    --warning-soft: var(--d-warning-soft);
+    --warning-border: var(--d-warning-border);
+    --danger: var(--d-danger);
+    --danger-soft: var(--d-danger-soft);
+    --danger-border: var(--d-danger-border);
 
-    --focus: #fb7534;
+    --focus: var(--d-focus);
 
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
-    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.5);
-    --shadow-lg: 0 16px 40px -12px rgb(0 0 0 / 0.7);
+    --sidebar: var(--d-sidebar);
+    --sidebar-line: var(--d-sidebar-line);
+    --sidebar-ink: var(--d-sidebar-ink);
+    --sidebar-ink-strong: var(--d-sidebar-ink-strong);
+    --sidebar-ink-faint: var(--d-sidebar-ink-faint);
+    --sidebar-hover: var(--d-sidebar-hover);
+    --sidebar-active: var(--d-sidebar-active);
+
+    --shadow-sm: var(--d-shadow-sm);
+    --shadow-md: var(--d-shadow-md);
+    --shadow-lg: var(--d-shadow-lg);
   }
 }
 
@@ -121,6 +336,10 @@
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
 
+  --color-band: var(--band);
+  --color-band-ink: var(--band-ink);
+  --color-band-line: var(--band-line);
+
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
@@ -131,14 +350,24 @@
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-success-border: var(--success-border);
+  --color-on-success: var(--on-success);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
   --color-warning-border: var(--warning-border);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-danger-border: var(--danger-border);
+  --color-on-danger: var(--on-danger);
 
   --color-focus: var(--focus);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-line: var(--sidebar-line);
+  --color-sidebar-ink: var(--sidebar-ink);
+  --color-sidebar-ink-strong: var(--sidebar-ink-strong);
+  --color-sidebar-ink-faint: var(--sidebar-ink-faint);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
 
   --radius-card: var(--radius);
   --radius-control: var(--radius-sm);
@@ -172,6 +401,18 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Only while the user is actually switching. A permanent transition on colour
+   would also animate hovers and page loads, which reads as lag. */
+:root[data-theme-switching] *,
+:root[data-theme-switching] *::before,
+:root[data-theme-switching] *::after {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    fill 0.2s ease !important;
+}
+
 /* Tabular figures everywhere money is shown, so prices in a column line up. */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
@@ -198,6 +439,52 @@ body {
   color: var(--ink-inverse);
   font-size: 0.8125rem;
   font-weight: 600;
+}
+
+/* The theme picker highlights the active option from the DOM attribute rather
+   than from React state, so it is correct on the very first paint — before
+   hydration tells the component which theme is stored. */
+.theme-option {
+  color: var(--ink-muted);
+}
+
+/* Segmented pill: the active option becomes a raised "thumb". */
+:root:not([data-theme]) .theme-option-thumb[data-theme-value='system'],
+:root[data-theme='light'] .theme-option-thumb[data-theme-value='light'],
+:root[data-theme='dark'] .theme-option-thumb[data-theme-value='dark'] {
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Menu row: the panel is already raised, so the active row is tinted instead. */
+:root:not([data-theme]) .theme-option-row[data-theme-value='system'],
+:root[data-theme='light'] .theme-option-row[data-theme-value='light'],
+:root[data-theme='dark'] .theme-option-row[data-theme-value='dark'] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+/* Same trick for the trigger icon: show the glyph for the active scheme without
+   waiting for JavaScript. */
+.theme-icon-light,
+.theme-icon-dark {
+  display: none;
+}
+:root[data-theme='light'] .theme-icon-light,
+:root[data-theme='dark'] .theme-icon-dark {
+  display: block;
+}
+:root:not([data-theme]) .theme-icon-light {
+  display: block;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .theme-icon-light {
+    display: none;
+  }
+  :root:not([data-theme]) .theme-icon-dark {
+    display: block;
+  }
 }
 
 @keyframes fade-in {
