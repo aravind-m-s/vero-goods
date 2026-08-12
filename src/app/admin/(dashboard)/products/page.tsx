@@ -241,13 +241,12 @@ export default function AdminProductsPage() {
                     <TableCell className="text-xs text-ink-muted">{product.variantCount}</TableCell>
                     <TableCell className="text-right">
                       <span
-                        className={`text-xs font-bold tabular-nums ${
-                          product.totalStock === 0
-                            ? 'text-danger'
-                            : product.totalStock <= 5
-                              ? 'text-warning'
-                              : 'text-ink-muted'
-                        }`}
+                        className={`text-xs font-bold tabular-nums ${product.totalStock === 0
+                          ? 'text-danger'
+                          : product.totalStock <= 5
+                            ? 'text-warning'
+                            : 'text-ink-muted'
+                          }`}
                       >
                         {product.totalStock}
                       </span>
@@ -269,6 +268,7 @@ export default function AdminProductsPage() {
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
                         <IconButton
+                          size="l"
                           label={product.isActive ? 'Hide from storefront' : 'Publish'}
                           onClick={() => handleToggleActive(product)}
                         >
@@ -278,20 +278,42 @@ export default function AdminProductsPage() {
                             <Eye className="h-3.5 w-3.5" />
                           )}
                         </IconButton>
-                        <IconButton label="Copy URL" onClick={() => copyUrl(product.slug)}>
+
+                        <IconButton
+                          size="l"
+                          label="Copy URL"
+                          onClick={() => copyUrl(product.slug)}
+                        >
                           <Copy className="h-3.5 w-3.5" />
                         </IconButton>
+
                         <Link href={`/products/${product.slug}`} target="_blank">
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="View on storefront">
+                          <Button
+                            variant="ghost"
+                            size="l"
+                            className="h-8 w-8 p-0"
+                            title="View on storefront"
+                          >
                             <ExternalLink className="h-3.5 w-3.5" />
                           </Button>
                         </Link>
+
                         <Link href={`/admin/products/${product.id}/edit`}>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Edit">
+                          <Button
+                            variant="ghost"
+                            size="l"
+                            className="h-8 w-8 p-0"
+                            title="Edit"
+                          >
                             <Edit2 className="h-3.5 w-3.5" />
                           </Button>
                         </Link>
-                        <IconButton label="Archive" onClick={() => setToArchive(product)}>
+
+                        <IconButton
+                          size="l"
+                          label="Archive"
+                          onClick={() => setToArchive(product)}
+                        >
                           <Archive className="h-3.5 w-3.5 text-danger" />
                         </IconButton>
                       </div>
@@ -329,15 +351,24 @@ export default function AdminProductsPage() {
 
 function IconButton({
   label,
+  size = 'l',
   onClick,
   children,
 }: {
   label: string;
+  size?: 'sm' | 'md' | 'l' | 'lg';
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClick} title={label} aria-label={label}>
+    <Button
+      variant="ghost"
+      size={size}
+      className="h-8 w-8 p-0"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+    >
       {children}
     </Button>
   );

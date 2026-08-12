@@ -148,7 +148,7 @@ export function ProductForm({
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/admin/products">
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+          <Button variant="ghost" size="l" className="h-8 w-8 p-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>

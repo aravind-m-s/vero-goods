@@ -126,7 +126,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/admin/orders">
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+          <Button variant="ghost" size="l" className="h-8 w-8 p-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -266,7 +266,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <Badge
                   variant={
                     order.paymentStatus === PaymentStatus.PAID ||
-                    order.paymentStatus === PaymentStatus.COD
+                      order.paymentStatus === PaymentStatus.COD
                       ? 'success'
                       : order.paymentStatus === PaymentStatus.FAILED
                         ? 'danger'
@@ -401,13 +401,12 @@ function Stat({
     <div>
       <p className="text-2xs uppercase tracking-wider text-ink-subtle">{label}</p>
       <p
-        className={`text-sm font-bold tabular-nums ${
-          tone === 'positive'
+        className={`text-sm font-bold tabular-nums ${tone === 'positive'
             ? 'text-success'
             : tone === 'negative'
               ? 'text-danger'
               : 'text-ink'
-        }`}
+          }`}
       >
         {value}
       </p>
