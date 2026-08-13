@@ -227,7 +227,7 @@ export default function AdminOrdersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Link href={`/admin/orders/${order.id}`}>
-                      <Button variant="ghost" size="l" className="h-8 w-8 p-0" aria-label="View order">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 p-0" aria-label="View order">
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
                     </Link>

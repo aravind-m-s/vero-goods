@@ -268,7 +268,7 @@ export default function AdminProductsPage() {
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
                         <IconButton
-                          size="l"
+                          size="icon"
                           label={product.isActive ? 'Hide from storefront' : 'Publish'}
                           onClick={() => handleToggleActive(product)}
                         >
@@ -280,7 +280,7 @@ export default function AdminProductsPage() {
                         </IconButton>
 
                         <IconButton
-                          size="l"
+                          size="icon"
                           label="Copy URL"
                           onClick={() => copyUrl(product.slug)}
                         >
@@ -290,7 +290,7 @@ export default function AdminProductsPage() {
                         <Link href={`/products/${product.slug}`} target="_blank">
                           <Button
                             variant="ghost"
-                            size="l"
+                            size="icon"
                             className="h-8 w-8 p-0"
                             title="View on storefront"
                           >
@@ -301,7 +301,7 @@ export default function AdminProductsPage() {
                         <Link href={`/admin/products/${product.id}/edit`}>
                           <Button
                             variant="ghost"
-                            size="l"
+                            size="icon"
                             className="h-8 w-8 p-0"
                             title="Edit"
                           >
@@ -310,7 +310,7 @@ export default function AdminProductsPage() {
                         </Link>
 
                         <IconButton
-                          size="l"
+                          size="icon"
                           label="Archive"
                           onClick={() => setToArchive(product)}
                         >
