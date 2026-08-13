@@ -146,7 +146,7 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
             </p>
           )}
           <p className="mt-1 text-xs text-ink-subtle">
-            Inclusive of all taxes · Free shipping over ₹2,000
+            Inclusive of all taxes · Dispatched in 1–4 working days
           </p>
         </div>
 

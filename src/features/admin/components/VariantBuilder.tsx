@@ -121,7 +121,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                     className="font-mono text-xs"
                   />
                 </FieldBlock>
-                <FieldBlock label="Selling price (₹, incl. GST)">
+                <FieldBlock label="Selling price (₹)">
                   <Input
                     type="number"
                     min={1}
@@ -179,7 +179,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                     <Input
                       value={variant.supplier.name}
                       onChange={(event) => updateSupplier(index, { name: event.target.value })}
-                      placeholder="Anycubic Official Store"
+                      placeholder="Vero Direct Warehouse"
                     />
                   </FieldBlock>
                   <FieldBlock label="Supplier SKU">

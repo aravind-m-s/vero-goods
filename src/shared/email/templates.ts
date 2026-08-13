@@ -67,7 +67,6 @@ function totalsRows(order: Order): string {
     line('Shipping', order.shippingMinor === 0 ? 'Free' : formatMinor(order.shippingMinor)),
     order.codFeeMinor > 0 ? line('COD handling fee', formatMinor(order.codFeeMinor)) : '',
     line('Total paid', formatMinor(order.totalMinor), true),
-    line(`Includes GST`, formatMinor(order.taxMinor)),
   ].join('');
 }
 

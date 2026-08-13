@@ -42,10 +42,10 @@ export default async function StoreHomePage() {
       <header className="flex flex-col gap-2 pb-6 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-ink">
-            3D printing hardware, stocked in India
+            Everyday home & utility essentials, stocked in India
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Printers, filament and accessories — GST invoiced, dispatched in 1–4 working days.
+            Kitchen accessories, smart tools & organization — dispatched in 1–4 working days.
           </p>
         </div>
         <p className="shrink-0 text-xs text-ink-subtle">

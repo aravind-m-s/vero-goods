@@ -22,12 +22,23 @@ export const metadata: Metadata = {
   // a page is shared.
   metadataBase: new URL(appUrl()),
   title: {
-    default: 'Vero Goods — Premium 3D Hardware & Filaments',
+    default: 'Vero Goods — Premium Everyday Home & Utility Essentials',
     template: '%s | Vero Goods',
   },
   description:
-    'Shop premium 3D printers, filaments, and accessories. Fast delivery across India with secure Razorpay and Cash on Delivery payment options.',
-  keywords: ['3D printer', 'filament', 'India', 'Vero Goods', 'Anycubic', 'Creality', 'Elegoo'],
+    'Shop premium kitchen accessories, smart tools, containers, and home organization essentials. Fast delivery across India with secure online payment and Cash on Delivery.',
+  keywords: ['Kitchen accessories', 'Smart tools', 'Containers', 'Ratchet screwdriver', 'Home organization', 'India', 'Vero Goods'],
+  icons: {
+    // favicon.svg in src/app/ is auto-discovered by Next.js; the entries below
+    // also cover browsers that prefer explicit sizes or the apple-touch-icon.
+    icon: [
+      { url: '/logo.svg', type: 'image/svg+xml' },
+    ],
+    apple: [
+      { url: '/logo.svg', sizes: '180x180', type: 'image/svg+xml' },
+    ],
+    shortcut: '/logo.svg',
+  },
   openGraph: {
     siteName: 'Vero Goods',
     type: 'website',

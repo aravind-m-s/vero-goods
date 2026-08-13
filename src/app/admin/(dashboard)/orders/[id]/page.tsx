@@ -201,11 +201,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   <dt>Total</dt>
                   <dd className="tabular-nums">{formatMinor(order.totalMinor)}</dd>
                 </div>
-                {order.taxLines.map((line) => (
-                  <p key={line.ratePercent} className="text-2xs text-ink-subtle">
-                    Includes GST @ {line.ratePercent}% — {formatMinor(line.taxMinor)}
-                  </p>
-                ))}
               </dl>
             </CardContent>
           </Card>

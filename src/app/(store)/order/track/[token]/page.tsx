@@ -232,12 +232,6 @@ export default async function OrderTrackingPage(props: PageProps<'/order/track/[
               <dt>Grand total</dt>
               <dd className="tabular-nums">{formatMinor(order.totalMinor)}</dd>
             </div>
-            {order.taxLines.map((line) => (
-              <p key={line.ratePercent} className="text-2xs text-ink-subtle">
-                Includes GST @ {line.ratePercent}% — {formatMinor(line.taxMinor)} on{' '}
-                {formatMinor(line.taxableMinor)}
-              </p>
-            ))}
           </dl>
         </CardContent>
       </Card>

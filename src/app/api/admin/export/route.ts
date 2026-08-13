@@ -33,7 +33,7 @@ const HEADERS = [
   'Subtotal (INR)',
   'Shipping (INR)',
   'COD Fee (INR)',
-  'GST Included (INR)',
+  'Tax Included (INR)',
   'Total (INR)',
   'Payment Method',
   'Payment Status',
@@ -78,8 +78,7 @@ export async function GET(request: NextRequest) {
             order.customerName,
             order.email,
             order.phone,
-            `${order.shippingAddress.line1}${
-              order.shippingAddress.line2 ? `, ${order.shippingAddress.line2}` : ''
+            `${order.shippingAddress.line1}${order.shippingAddress.line2 ? `, ${order.shippingAddress.line2}` : ''
             }`,
             order.shippingAddress.city,
             order.shippingAddress.state,

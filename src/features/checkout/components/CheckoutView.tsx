@@ -596,10 +596,6 @@ export function CheckoutView() {
                     <dt>Total</dt>
                     <dd className="tabular-nums">{formatMinor(totals.totalMinor)}</dd>
                   </div>
-                  <p className="text-2xs text-ink-subtle">
-                    Includes {formatMinor(totals.taxMinor)} GST
-                    {totals.taxLines.length === 1 ? ` @ ${totals.taxLines[0].ratePercent}%` : ''}
-                  </p>
                 </dl>
 
                 <Button

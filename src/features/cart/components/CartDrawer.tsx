@@ -2,13 +2,11 @@
 
 import React, { useEffect } from 'react';
 import Link from 'next/link';
-import { Minus, Plus, ShoppingBag, Trash2, Truck, X } from 'lucide-react';
+import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { useCart } from '@/features/cart/components/CartContext';
 import { Button } from '@/shared/ui/button';
 import { formatMinor } from '@/shared/lib/money';
 import { cn } from '@/shared/lib/utils';
-
-const FREE_SHIPPING_MINOR = 200000;
 
 /**
  * Line prices and totals come from the server quote held in CartContext, so
@@ -29,12 +27,6 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       document.body.style.overflow = '';
     };
   }, [open, onClose]);
-
-  const remainingForFreeShipping = FREE_SHIPPING_MINOR - totals.subtotalMinor;
-  const freeShippingProgress = Math.min(
-    100,
-    Math.round((totals.subtotalMinor / FREE_SHIPPING_MINOR) * 100)
-  );
 
   return (
     <>
@@ -71,35 +63,6 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             <X className="h-4 w-4" />
           </button>
         </header>
-
-        {lines.length > 0 && (
-          <div className="border-b border-line bg-surface-sunken px-5 py-3">
-            {remainingForFreeShipping > 0 ? (
-              <p className="flex items-center gap-1.5 text-xs text-ink-muted">
-                <Truck className="h-3.5 w-3.5 shrink-0 text-accent" />
-                Add <strong className="text-ink">{formatMinor(remainingForFreeShipping)}</strong>{' '}
-                for free shipping
-              </p>
-            ) : (
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-success">
-                <Truck className="h-3.5 w-3.5 shrink-0" /> Free shipping unlocked
-              </p>
-            )}
-            <div
-              className="mt-2 h-1 w-full overflow-hidden rounded-full bg-line"
-              role="progressbar"
-              aria-valuenow={freeShippingProgress}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Progress towards free shipping"
-            >
-              <div
-                className="h-full rounded-full bg-accent transition-[width] duration-300"
-                style={{ width: `${freeShippingProgress}%` }}
-              />
-            </div>
-          </div>
-        )}
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {lines.length === 0 ? (
@@ -207,9 +170,6 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 <dt>Total</dt>
                 <dd className="tabular-nums">{formatMinor(totals.totalMinor)}</dd>
               </div>
-              <p className="text-2xs text-ink-subtle">
-                Includes {formatMinor(totals.taxMinor)} GST
-              </p>
             </dl>
 
             <Link href="/checkout" onClick={onClose} className="block">

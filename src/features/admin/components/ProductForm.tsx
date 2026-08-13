@@ -178,7 +178,7 @@ export function ProductForm({
                     id="title"
                     value={title}
                     onChange={(event) => handleTitleChange(event.target.value)}
-                    placeholder="Creality Ender 3 V3 SE"
+                    placeholder="Multi-Angle Precision Ratchet Screwdriver"
                     error={fieldErrors.title}
                   />
                 </div>
@@ -193,7 +193,7 @@ export function ProductForm({
                       setSlugTouched(true);
                       setSlug(event.target.value);
                     }}
-                    placeholder="creality-ender-3-v3-se"
+                    placeholder="precision-ratchet-screwdriver"
                     error={fieldErrors.slug}
                   />
                 </div>
@@ -213,7 +213,7 @@ export function ProductForm({
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label htmlFor="gst">GST rate (%)</Label>
+                  <Label htmlFor="gst">Tax rate (%)</Label>
                   <Input
                     id="gst"
                     type="number"
@@ -224,7 +224,7 @@ export function ProductForm({
                     error={fieldErrors.gstRatePercent}
                   />
                   <p className="text-3xs text-ink-subtle">
-                    Prices are GST-inclusive; this rate is used to break out tax on the invoice.
+                    Tax percentage included in product pricing.
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -236,7 +236,7 @@ export function ProductForm({
                     placeholder="8477"
                     error={fieldErrors.hsnCode}
                   />
-                  <p className="text-3xs text-ink-subtle">Required on a compliant GST invoice.</p>
+                  <p className="text-3xs text-ink-subtle">Required for tax compliance.</p>
                 </div>
               </div>
             </CardContent>

@@ -11,8 +11,7 @@ import { cn } from '@/shared/lib/utils';
 
 const NAV = [
   { href: '/', label: 'Shop all' },
-  { href: '/#printers', label: '3D printers' },
-  { href: '/#filaments', label: 'Filaments' },
+  { href: '#', label: 'Orders', isNoOp: true },
 ];
 
 export function Header() {
@@ -53,11 +52,9 @@ export function Header() {
           the first thing that answers "can I trust this shop?". */}
       <div className="bg-band text-band-ink">
         <div className="mx-auto flex h-9 max-w-7xl items-center justify-center gap-6 px-4 text-2xs font-medium sm:px-6 lg:px-8">
-          <span>Free shipping over ₹2,000</span>
-          <span aria-hidden="true" className="opacity-30">·</span>
           <span>Cash on delivery available</span>
-          <span aria-hidden="true" className="hidden opacity-30 sm:inline">·</span>
-          <span className="hidden sm:inline">Ships across India</span>
+          <span aria-hidden="true" className="opacity-30">·</span>
+          <span>Ships across India</span>
         </div>
       </div>
 
@@ -85,8 +82,13 @@ export function Header() {
           <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
             {NAV.map((item) => (
               <Link
-                key={item.href}
+                key={item.label}
                 href={item.href}
+                onClick={(e) => {
+                  if (item.isNoOp) {
+                    e.preventDefault();
+                  }
+                }}
                 className="rounded-control px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
               >
                 {item.label}
@@ -136,9 +138,15 @@ export function Header() {
           <div className="flex flex-col p-2">
             {NAV.map((item) => (
               <Link
-                key={item.href}
+                key={item.label}
                 href={item.href}
-                onClick={() => setIsMenuOpen(false)}
+                onClick={(e) => {
+                  if (item.isNoOp) {
+                    e.preventDefault();
+                  } else {
+                    setIsMenuOpen(false);
+                  }
+                }}
                 className="rounded-control px-3 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
               >
                 {item.label}

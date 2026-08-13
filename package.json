@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "hash-password": "node scripts/hash-password.mjs",
-    "migrate": "node --env-file=.env scripts/migrate-to-v2.mjs"
+    "migrate": "node --env-file=.env scripts/migrate-to-v2.mjs",
+    "reseed": "node --env-file=.env scripts/reseed.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.1",
