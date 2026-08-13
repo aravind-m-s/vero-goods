@@ -351,12 +351,12 @@ export default function AdminProductsPage() {
 
 function IconButton({
   label,
-  size = 'l',
+  size = 'icon',
   onClick,
   children,
 }: {
   label: string;
-  size?: 'sm' | 'md' | 'l' | 'lg';
+  size?: 'sm' | 'md' | 'icon' | 'lg';
   onClick: () => void;
   children: React.ReactNode;
 }) {
