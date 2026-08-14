@@ -35,13 +35,14 @@ function SuccessContent() {
       </div>
 
       <div className="space-y-2">
-        <h1 className="text-2xl font-black tracking-tight text-ink sm:text-3xl">Order confirmed</h1>
+        <h1 className="text-2xl font-black tracking-tight text-ink sm:text-3xl">Order placed</h1>
         {orderNumber && (
           <p className="font-mono text-sm font-semibold text-accent">#{orderNumber}</p>
         )}
         <p className="mx-auto max-w-xs text-xs leading-relaxed text-ink-subtle">
-          Thanks for shopping with Vero Goods. We&apos;ve emailed your confirmation and tracking
-          link, and we&apos;ll keep you posted at every step.
+          Thanks for shopping with Vero Goods. Our team confirms every order before it is packed —
+          we&apos;ve emailed your receipt and tracking link, and we&apos;ll keep you posted at every
+          step.
         </p>
       </div>
 
@@ -50,7 +51,7 @@ function SuccessContent() {
           <NextStep
             icon={Mail}
             title="Check your inbox"
-            body="Your confirmation email contains the invoice summary and tracking link."
+            body="Your receipt email contains the order summary and tracking link."
           />
           <NextStep
             icon={Truck}

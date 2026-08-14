@@ -1,14 +1,15 @@
 import type { NextConfig } from 'next';
+import { ALLOWED_IMAGE_HOSTS } from './src/shared/lib/image-hosts';
 
 const nextConfig: NextConfig = {
   images: {
-    // next/image refuses remote hosts that are not listed here. Add the CDN or
-    // supplier image host you actually use before pasting its URLs into a product.
-    remotePatterns: [
-      { protocol: 'https', hostname: 'images.unsplash.com' },
-      { protocol: 'https', hostname: 'plus.unsplash.com' },
-      { protocol: 'https', hostname: 'res.cloudinary.com' },
-    ],
+    // next/image refuses remote hosts that are not listed here. The list lives
+    // in src/shared/lib/image-hosts.ts because the storefront reads it too, to
+    // fall back to an unoptimised <img> instead of throwing on a stray host.
+    remotePatterns: ALLOWED_IMAGE_HOSTS.map((hostname) => ({
+      protocol: 'https' as const,
+      hostname,
+    })),
     formats: ['image/avif', 'image/webp'],
     // Product imagery rarely changes; cache the optimised variants for a week.
     minimumCacheTTL: 60 * 60 * 24 * 7,

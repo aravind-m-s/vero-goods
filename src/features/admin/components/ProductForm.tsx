@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Save, Sparkles } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Input } from '@/shared/ui/input';
@@ -12,7 +12,39 @@ import { Textarea } from '@/shared/ui/textarea';
 import { useToast } from '@/shared/ui/toast';
 import { SpecificationBuilder, type SpecSection } from '@/features/admin/components/SpecificationBuilder';
 import { VariantBuilder, type VariantDraft } from '@/features/admin/components/VariantBuilder';
-import { ProductFormSchema } from '@/features/catalog/schemas';
+import { FORM_ERROR_KEY, ProductFormSchema, issuesToFieldErrors } from '@/features/catalog/schemas';
+import { isAllowedImageHost } from '@/shared/lib/image-hosts';
+
+/**
+ * Turns a dotted schema path into something an admin recognises, e.g.
+ * `variants.0.supplier.costPrice` -> "Variant 1 · Supplier · Cost price".
+ */
+function humanisePath(path: string): string {
+  if (path === FORM_ERROR_KEY) return 'Form';
+
+  const segments = path.split('.');
+  const parts: string[] = [];
+
+  for (let i = 0; i < segments.length; i += 1) {
+    const segment = segments[i];
+    const next = segments[i + 1];
+    const isIndexed = next !== undefined && /^\d+$/.test(next);
+    const label = segment
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, (char) => char.toUpperCase())
+      .trim();
+
+    if (isIndexed) {
+      const singular = label.replace(/s$/, '');
+      parts.push(`${singular} ${Number(next) + 1}`);
+      i += 1;
+    } else if (!/^\d+$/.test(segment)) {
+      parts.push(label);
+    }
+  }
+
+  return parts.join(' · ');
+}
 
 /**
  * Shared create/edit form. Both admin pages used to carry near-identical
@@ -27,6 +59,7 @@ export interface ProductFormInitialValues {
   gstRatePercent: number;
   hsnCode?: string;
   imageUrls: string[];
+  videoUrls: string[];
   variants: VariantDraft[];
   specifications: SpecSection[];
 }
@@ -49,10 +82,47 @@ export function ProductForm({
   const [gstRatePercent, setGstRatePercent] = useState(String(initial.gstRatePercent));
   const [hsnCode, setHsnCode] = useState(initial.hsnCode ?? '');
   const [imagesText, setImagesText] = useState(initial.imageUrls.join('\n'));
+  const [videosText, setVideosText] = useState(initial.videoUrls.join('\n'));
   const [variants, setVariants] = useState<VariantDraft[]>(initial.variants);
   const [specifications, setSpecifications] = useState<SpecSection[]>(initial.specifications);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const errorSummaryRef = useRef<HTMLDivElement>(null);
+
+  const errorEntries = Object.entries(fieldErrors);
+
+  /** Image hosts that will render but cannot go through next/image. */
+  const unoptimisedHosts = Array.from(
+    new Set(
+      imagesText
+        .split('\n')
+        .map((url) => url.trim())
+        .filter((url) => url && !isAllowedImageHost(url))
+        .map((url) => {
+          try {
+            return new URL(url).hostname;
+          } catch {
+            return url.slice(0, 40);
+          }
+        })
+    )
+  );
+
+  /** First message on `prefix` itself or any path beneath it. */
+  const firstErrorFor = (prefix: string) =>
+    errorEntries.find(([path]) => path === prefix || path.startsWith(`${prefix}.`))?.[1];
+
+  /**
+   * Nested fields (variants, suppliers, specification rows) fail far below the
+   * fold, so the summary is what makes a rejected save actionable.
+   */
+  const showErrors = (messages: Record<string, string>, fallback: string) => {
+    setFieldErrors(messages);
+    error(messages[FORM_ERROR_KEY] ?? Object.values(messages)[0] ?? fallback);
+    requestAnimationFrame(() => {
+      errorSummaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
 
   const handleTitleChange = (value: string) => {
     setTitle(value);
@@ -70,6 +140,25 @@ export function ProductForm({
     event.preventDefault();
     setFieldErrors({});
 
+    // Pruned in state, not only in the payload, so error paths like
+    // `specifications.0.rows.1.label` still point at the row on screen.
+    const cleanedSpecifications = specifications
+      .map((spec) => ({
+        ...spec,
+        heading: spec.heading.trim(),
+        rows: spec.rows
+          .filter((row) => row.label.trim() !== '' || row.value.trim() !== '')
+          .map((row, index) => ({
+            ...row,
+            label: row.label.trim(),
+            value: row.value.trim(),
+            sortOrder: index,
+          })),
+      }))
+      .filter((spec) => spec.heading !== '' || spec.rows.length > 0)
+      .map((spec, index) => ({ ...spec, sortOrder: index }));
+    setSpecifications(cleanedSpecifications);
+
     const payload = {
       title,
       slug,
@@ -78,6 +167,10 @@ export function ProductForm({
       gstRatePercent: Number(gstRatePercent),
       hsnCode: hsnCode || undefined,
       imageUrls: imagesText
+        .split('\n')
+        .map((url) => url.trim())
+        .filter(Boolean),
+      videoUrls: videosText
         .split('\n')
         .map((url) => url.trim())
         .filter(Boolean),
@@ -96,7 +189,9 @@ export function ProductForm({
           leadTimeDays: Number(variant.supplier.leadTimeDays),
         },
       })),
-      specifications: specifications.map((spec) => ({
+      // Rows the user added but never filled are noise, not errors — they were
+      // dropped above. Half-filled rows stay so validation names the gap.
+      specifications: cleanedSpecifications.map((spec) => ({
         id: spec.id,
         heading: spec.heading,
         rows: spec.rows.map((row) => ({ id: row.id, label: row.label, value: row.value })),
@@ -107,13 +202,7 @@ export function ProductForm({
     // form instead of as a generic 400.
     const parsed = ProductFormSchema.safeParse(payload);
     if (!parsed.success) {
-      const flat = parsed.error.flatten();
-      const messages: Record<string, string> = {};
-      for (const [field, errors] of Object.entries(flat.fieldErrors)) {
-        if (errors?.[0]) messages[field] = errors[0];
-      }
-      setFieldErrors(messages);
-      error(flat.formErrors[0] ?? 'Please fix the highlighted fields');
+      showErrors(issuesToFieldErrors(parsed.error), 'Please fix the highlighted fields');
       return;
     }
 
@@ -128,9 +217,21 @@ export function ProductForm({
         }
       );
 
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        fieldErrors?: Record<string, string>;
+      };
       if (!response.ok) {
-        error(data.error ?? 'Could not save the product');
+        // The API re-validates; surface its field errors the same way, so a
+        // server-only failure (duplicate slug, duplicate SKU) is visible too.
+        if (data.fieldErrors && Object.keys(data.fieldErrors).length > 0) {
+          showErrors(data.fieldErrors, data.error ?? 'Please fix the highlighted fields');
+          return;
+        }
+        showErrors(
+          { [FORM_ERROR_KEY]: data.error ?? 'Could not save the product' },
+          'Could not save the product'
+        );
         return;
       }
 
@@ -163,6 +264,31 @@ export function ProductForm({
           </p>
         </div>
       </div>
+
+      {errorEntries.length > 0 && (
+        <div
+          ref={errorSummaryRef}
+          role="alert"
+          aria-live="assertive"
+          className="rounded-card border border-danger/40 bg-danger/5 p-4"
+        >
+          <p className="flex items-center gap-2 text-sm font-bold text-danger">
+            <AlertCircle className="h-4 w-4" />
+            {errorEntries.length} problem{errorEntries.length === 1 ? '' : 's'} stopped this product
+            from saving
+          </p>
+          <ul className="mt-2 space-y-1">
+            {errorEntries.map(([path, message]) => (
+              <li key={path} className="text-xs text-ink-muted">
+                {path !== FORM_ERROR_KEY && (
+                  <span className="font-semibold text-ink">{humanisePath(path)}: </span>
+                )}
+                {message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-8">
@@ -242,12 +368,16 @@ export function ProductForm({
             </CardContent>
           </Card>
 
-          <VariantBuilder value={variants} onChange={setVariants} />
+          <VariantBuilder value={variants} onChange={setVariants} errors={fieldErrors} />
           {fieldErrors.variants && (
             <p className="text-xs font-medium text-danger">{fieldErrors.variants}</p>
           )}
 
-          <SpecificationBuilder value={specifications} onChange={setSpecifications} />
+          <SpecificationBuilder
+            value={specifications}
+            onChange={setSpecifications}
+            errors={fieldErrors}
+          />
         </div>
 
         <div className="space-y-6 lg:col-span-4">
@@ -265,10 +395,37 @@ export function ProductForm({
                   onChange={(event) => setImagesText(event.target.value)}
                   placeholder={'https://example.com/image1.jpg\nhttps://example.com/image2.jpg'}
                   className="font-mono text-xs leading-normal"
-                  error={fieldErrors.imageUrls}
+                  error={firstErrorFor('imageUrls')}
+                />
+                {unoptimisedHosts.length > 0 ? (
+                  <p className="mt-1 text-3xs leading-normal text-warning">
+                    {unoptimisedHosts.join(', ')} {unoptimisedHosts.length === 1 ? 'is' : 'are'} not
+                    in the optimised-image allowlist. These still display, but at full size and
+                    without WebP/AVIF. Add the host to `src/shared/lib/image-hosts.ts` to optimise
+                    them.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-3xs leading-normal text-ink-subtle">
+                    Hosts listed in `src/shared/lib/image-hosts.ts` are optimised; anything else
+                    still renders, just unoptimised.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1 border-t border-line pt-3">
+                <Label htmlFor="videos-list">Video URLs (one per line)</Label>
+                <Textarea
+                  id="videos-list"
+                  rows={4}
+                  value={videosText}
+                  onChange={(event) => setVideosText(event.target.value)}
+                  placeholder={'https://youtu.be/dQw4w9WgXcQ\nhttps://cdn.example.com/demo.mp4'}
+                  className="font-mono text-xs leading-normal"
+                  error={firstErrorFor('videoUrls')}
                 />
                 <p className="mt-1 text-3xs leading-normal text-ink-subtle">
-                  The host must be listed in `next.config.ts` under `images.remotePatterns`.
+                  YouTube or Vimeo links play as embeds; .mp4 / .webm links play inline. Videos
+                  appear after the images in the product gallery.
                 </p>
               </div>
             </CardContent>

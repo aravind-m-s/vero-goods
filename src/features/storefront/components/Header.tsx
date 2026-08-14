@@ -11,21 +11,21 @@ import { cn } from '@/shared/lib/utils';
 
 const NAV = [
   { href: '/', label: 'Shop all' },
-  { href: '#', label: 'Orders', isNoOp: true },
+  { href: '/account/orders', label: 'Orders' },
 ];
 
 export function Header() {
   const { cartCount, isHydrated } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [customer, setCustomer] = useState<{ name: string; email: string } | null>(null);
+  const [customer, setCustomer] = useState<{ name: string } | null>(null);
 
   const fetchSession = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/otp');
       if (!response.ok) return;
       const data = await response.json();
-      setCustomer(data.user ? { name: data.user.name, email: data.user.email } : null);
+      setCustomer(data.user ? { name: data.user.name } : null);
     } catch {
       // Treat an unreachable session endpoint as signed out.
     }
@@ -84,11 +84,6 @@ export function Header() {
               <Link
                 key={item.label}
                 href={item.href}
-                onClick={(e) => {
-                  if (item.isNoOp) {
-                    e.preventDefault();
-                  }
-                }}
                 className="rounded-control px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
               >
                 {item.label}
@@ -101,15 +96,26 @@ export function Header() {
 
             {customer ? (
               <div className="flex items-center gap-1">
-                <span className="hidden max-w-[140px] items-center gap-1.5 truncate px-2 text-xs text-ink-muted lg:flex">
+                <Link
+                  href="/account"
+                  className="flex max-w-40 items-center gap-1.5 truncate rounded-control px-2 py-1.5 text-xs text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+                >
                   <User className="h-3.5 w-3.5 shrink-0" />
-                  {customer.name}
-                </span>
+                  <span className="hidden truncate lg:inline">{customer.name}</span>
+                  <span className="lg:hidden">Account</span>
+                </Link>
                 <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Sign out">
                   <LogOut className="h-4 w-4" />
                 </Button>
               </div>
-            ) : null}
+            ) : (
+              <Link href="/login">
+                <Button variant="ghost" size="sm" className="gap-1.5">
+                  <User className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sign in</span>
+                </Button>
+              </Link>
+            )}
 
             <button
               type="button"
@@ -136,22 +142,18 @@ export function Header() {
           )}
         >
           <div className="flex flex-col p-2">
-            {NAV.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                onClick={(e) => {
-                  if (item.isNoOp) {
-                    e.preventDefault();
-                  } else {
-                    setIsMenuOpen(false);
-                  }
-                }}
-                className="rounded-control px-3 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
-              >
-                {item.label}
-              </Link>
-            ))}
+            {[...NAV, { href: customer ? '/account' : '/login', label: customer ? 'My account' : 'Sign in' }].map(
+              (item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  onClick={() => setIsMenuOpen(false)}
+                  className="rounded-control px-3 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+                >
+                  {item.label}
+                </Link>
+              )
+            )}
 
             {/* Spelled out on mobile: the labelled control is clearer than an
                 icon when there is room for it. */}

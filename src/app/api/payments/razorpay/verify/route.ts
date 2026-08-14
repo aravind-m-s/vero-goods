@@ -10,7 +10,7 @@ import {
 } from '@/features/orders/server/orders.repo';
 import { PaymentStatus } from '@/features/orders/types';
 import { sendEmail } from '@/shared/email/send';
-import { orderConfirmationEmail } from '@/shared/email/templates';
+import { orderReceivedEmail } from '@/shared/email/templates';
 import {
   SIMULATED_SIGNATURE,
   fetchRazorpayPayment,
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
   await setInvoiceNumber(paid.id, invoiceNumber);
 
   const items = await getOrderItems(paid.id);
-  await sendEmail(orderConfirmationEmail({ ...paid, invoiceNumber }, items));
+  await sendEmail(orderReceivedEmail({ ...paid, invoiceNumber }, items));
 
   return NextResponse.json({
     success: true,

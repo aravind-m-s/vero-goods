@@ -5,18 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { z } from 'zod';
-import {
-  AlertCircle,
-  ArrowLeft,
-  Banknote,
-  Landmark,
-  Lock,
-  Mail,
-  ShieldCheck,
-  ShoppingBag,
-} from 'lucide-react';
+import { AlertCircle, ArrowLeft, Banknote, Landmark, Lock, MapPin, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useCart } from '@/features/cart/components/CartContext';
+import { AuthView } from '@/features/auth/components/AuthView';
+import type { PublicUser } from '@/features/auth/server/public-user';
+import type { Address } from '@/features/auth/types';
 import { CheckoutFormSchema } from '@/features/checkout/schemas';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
@@ -70,14 +64,10 @@ export function CheckoutView() {
   } = useCart();
   const { success: showSuccess, error: showError } = useToast();
 
-  const [customer, setCustomer] = useState<{ email: string; name: string; phone: string } | null>(
-    null
-  );
-  const [authStep, setAuthStep] = useState<'email' | 'otp' | 'verified'>('email');
-  const [emailInput, setEmailInput] = useState('');
-  const [otpInput, setOtpInput] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [customer, setCustomer] = useState<PublicUser | null>(null);
+  const [authStep, setAuthStep] = useState<'signin' | 'verified'>('signin');
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [simulation, setSimulation] = useState<RazorpaySession | null>(null);
 
@@ -106,83 +96,53 @@ export function CheckoutView() {
     if (paymentMethod) void refreshQuote(paymentMethod);
   }, [paymentMethod, refreshQuote]);
 
+  /** Stored numbers carry the country code; the form wants the 10 local digits. */
+  const toLocalPhone = (phone?: string) => (phone ? phone.replace(/\D/g, '').slice(-10) : '');
+
+  const applyAddress = useCallback(
+    (address: Address) => {
+      setSelectedAddressId(address.id);
+      setValue('name', address.fullName);
+      setValue('phone', toLocalPhone(address.phone));
+      setValue('line1', address.line1);
+      setValue('line2', address.line2 ?? '');
+      setValue('city', address.city);
+      setValue('state', address.state);
+      setValue('pinCode', address.pinCode);
+      setValue('country', 'India');
+    },
+    [setValue]
+  );
+
   const loadSession = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/otp');
       if (!response.ok) return;
-      const data = (await response.json()) as {
-        user: { email: string; name: string; phone: string } | null;
-      };
-      if (data.user) {
-        setCustomer(data.user);
-        setAuthStep('verified');
-        setValue('email', data.user.email);
-        setValue('name', data.user.name);
-        if (data.user.phone) setValue('phone', data.user.phone);
-      }
+      const data = (await response.json()) as { user: PublicUser | null };
+      if (!data.user) return;
+
+      setCustomer(data.user);
+      setAuthStep('verified');
+      setValue('email', data.user.email ?? '');
+      setValue('name', data.user.name);
+      if (data.user.phone) setValue('phone', toLocalPhone(data.user.phone));
+
+      // Saved addresses turn checkout into two clicks for a returning customer.
+      const addressResponse = await fetch('/api/account/addresses');
+      if (!addressResponse.ok) return;
+      const addressData = (await addressResponse.json()) as { addresses: Address[] };
+      setSavedAddresses(addressData.addresses);
+
+      const preferred = addressData.addresses.find((item) => item.isDefault);
+      if (preferred) applyAddress(preferred);
     } catch {
       // Not signed in — the auth panel handles it.
     }
-  }, [setValue]);
+  }, [setValue, applyAddress]);
 
   useEffect(() => {
     void loadSession();
   }, [loadSession]);
-
-  const handleSendOtp = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsAuthLoading(true);
-    setAuthError('');
-    try {
-      const response = await fetch('/api/auth/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailInput }),
-      });
-      const data = (await response.json()) as { error?: string; message?: string };
-      if (!response.ok) {
-        setAuthError(data.error ?? 'Could not send the verification code');
-        return;
-      }
-      setAuthStep('otp');
-      showSuccess(data.message ?? 'Verification code sent');
-    } catch {
-      setAuthError('Network error. Please try again.');
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsAuthLoading(true);
-    setAuthError('');
-    try {
-      const response = await fetch('/api/auth/otp', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailInput, code: otpInput }),
-      });
-      const data = (await response.json()) as {
-        error?: string;
-        user?: { email: string; name: string; phone: string };
-      };
-      if (!response.ok || !data.user) {
-        setAuthError(data.error ?? 'Invalid or expired code');
-        return;
-      }
-      setCustomer(data.user);
-      setAuthStep('verified');
-      setValue('email', data.user.email);
-      setValue('name', data.user.name);
-      if (data.user.phone) setValue('phone', data.user.phone);
-      showSuccess('Signed in');
-    } catch {
-      setAuthError('Verification failed. Please try again.');
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
 
   const goToSuccess = (trackingToken: string, orderNumber: string) => {
     clearPurchased();
@@ -205,7 +165,7 @@ export function CheckoutView() {
 
       if (verification.status === 202) {
         // Gateway unreachable; the webhook will settle it. Never lose the order.
-        showSuccess('Payment received. We will email your confirmation shortly.');
+        showSuccess('Payment received. We will email your receipt shortly.');
         goToSuccess(session.trackingToken, session.orderNumber);
         return;
       }
@@ -217,7 +177,7 @@ export function CheckoutView() {
       showSuccess('Payment confirmed');
       goToSuccess(session.trackingToken, session.orderNumber);
     } catch {
-      showError('Could not confirm the payment. Check your email for confirmation.');
+      showError('Could not confirm the payment. Check your email for the receipt.');
       setIsPlacingOrder(false);
     }
   };
@@ -270,6 +230,9 @@ export function CheckoutView() {
         body: JSON.stringify({
           name: values.name,
           phone: values.phone,
+          // Where the receipt goes. A customer who signed in by mobile types it
+          // here; for everyone else it is their account address.
+          email: values.email,
           shippingAddress: {
             line1: values.line1,
             line2: values.line2,
@@ -376,97 +339,71 @@ export function CheckoutView() {
       </header>
 
       {authStep !== 'verified' ? (
-        <div className="mx-auto w-full max-w-md">
-          <Card>
-            <CardHeader className="items-center text-center">
-              <div className="mx-auto mb-1 flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft">
-                <ShieldCheck className="h-5 w-5 text-accent" />
-              </div>
-              <CardTitle className="text-base">Verify your email</CardTitle>
-              <p className="text-xs leading-relaxed text-ink-subtle">
-                We send a one-time code so your order and tracking link stay tied to you. No
-                password, no account setup.
-              </p>
-            </CardHeader>
-            <CardContent>
-              {authStep === 'email' ? (
-                <form onSubmit={handleSendOtp} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="auth-email">Email address</Label>
-                    <div className="relative">
-                      <Input
-                        id="auth-email"
-                        type="email"
-                        autoComplete="email"
-                        placeholder="you@example.com"
-                        value={emailInput}
-                        onChange={(event) => setEmailInput(event.target.value)}
-                        className="pl-10"
-                        required
-                      />
-                      <Mail className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-ink-subtle" />
-                    </div>
-                  </div>
-                  {authError && <AuthError message={authError} />}
-                  <Button type="submit" variant="accent" className="w-full" isLoading={isAuthLoading}>
-                    Send verification code
-                  </Button>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="auth-code">6-digit code</Label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAuthStep('email');
-                          setAuthError('');
-                        }}
-                        className="cursor-pointer text-xs text-ink-subtle underline"
-                      >
-                        Change email
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <Input
-                        id="auth-code"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        maxLength={6}
-                        placeholder="000000"
-                        value={otpInput}
-                        onChange={(event) =>
-                          setOtpInput(event.target.value.replace(/\D/g, '').slice(0, 6))
-                        }
-                        className="pl-10 text-center text-lg font-bold tracking-[0.4em]"
-                        required
-                      />
-                      <Lock className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-ink-subtle" />
-                    </div>
-                    <p className="text-2xs text-ink-subtle">Sent to {emailInput}</p>
-                  </div>
-                  {authError && <AuthError message={authError} />}
-                  <Button type="submit" variant="accent" className="w-full" isLoading={isAuthLoading}>
-                    Verify and continue
-                  </Button>
-                </form>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <AuthView next="/checkout" />
       ) : (
         <form
           onSubmit={handleSubmit(onSubmit)}
           className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12"
         >
           <div className="space-y-6 lg:col-span-7">
+            {savedAddresses.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <MapPin className="h-4 w-4 text-ink-subtle" /> Saved addresses
+                  </CardTitle>
+                  <p className="text-xs text-ink-subtle">
+                    Pick one to fill the form, or edit the fields below for a one-off delivery.
+                  </p>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {savedAddresses.map((address) => (
+                    <button
+                      key={address.id}
+                      type="button"
+                      onClick={() => applyAddress(address)}
+                      className={cn(
+                        'cursor-pointer rounded-control border p-3 text-left transition-colors',
+                        selectedAddressId === address.id
+                          ? 'border-accent bg-accent-soft/30'
+                          : 'border-line hover:border-ink-subtle'
+                      )}
+                    >
+                      <span className="flex items-center gap-2 text-xs font-bold text-ink">
+                        {address.label}
+                        {address.isDefault && <Badge variant="secondary">Default</Badge>}
+                      </span>
+                      <span className="mt-1 block text-2xs leading-relaxed text-ink-muted">
+                        {address.line1}, {address.city}, {address.state} {address.pinCode}
+                      </span>
+                    </button>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Delivery address</CardTitle>
-                <p className="text-xs text-ink-subtle">Signed in as {customer?.email}</p>
+                <p className="text-xs text-ink-subtle">
+                  Signed in as {customer?.email ?? (customer?.phone ? `+${customer.phone}` : customer?.name)}
+                </p>
               </CardHeader>
               <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {!customer?.email && (
+                  <div className="sm:col-span-2">
+                    <Field id="email" label="Email for your receipt" error={errors.email?.message}>
+                      <Input
+                        id="email"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="you@example.com"
+                        error={errors.email?.message}
+                        {...register('email')}
+                      />
+                    </Field>
+                  </div>
+                )}
                 <Field id="name" label="Full name" error={errors.name?.message}>
                   <Input id="name" autoComplete="name" error={errors.name?.message} {...register('name')} />
                 </Field>

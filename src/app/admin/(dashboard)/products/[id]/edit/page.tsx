@@ -20,7 +20,7 @@ export default async function EditProductPage({
   const detail = await getProductById(id);
   if (!detail) notFound();
 
-  const { product, variants, images, specifications } = detail;
+  const { product, variants, images, videos, specifications } = detail;
 
   return (
     <ProductForm
@@ -34,6 +34,7 @@ export default async function EditProductPage({
         gstRatePercent: product.gstRatePercent,
         hsnCode: product.hsnCode ?? '',
         imageUrls: images.map((image) => image.url),
+        videoUrls: videos.map((video) => video.url),
         variants: variants.map((variant) => ({
           id: variant.id,
           name: variant.name,

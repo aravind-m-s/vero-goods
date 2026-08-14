@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { isAdminAuthenticated } from '@/features/auth/server/auth';
 import {
   InvalidTransitionError,
+  PaymentNotSettledError,
   getOrderById,
   getOrderItems,
   recordRefund,
@@ -62,7 +63,7 @@ export async function PUT(request: NextRequest, ctx: RouteContext<'/api/admin/or
   try {
     order = await updateOrderStatus(id, { ...parsed.data, by: 'admin' });
   } catch (error) {
-    if (error instanceof InvalidTransitionError) {
+    if (error instanceof InvalidTransitionError || error instanceof PaymentNotSettledError) {
       // Explicit state machine — no more jumping straight from PLACED to DELIVERED.
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

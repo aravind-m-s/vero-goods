@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       const rzpOrder = await createRazorpayOrder({
         amountMinor: order.totalMinor,
         receipt: order.orderNumber,
-        notes: { orderId: order.id, customerEmail: customer.email },
+        notes: { orderId: order.id, customerEmail: order.email || customer.email || '' },
       });
 
       // Persisted so verification can require that the callback refers to THIS

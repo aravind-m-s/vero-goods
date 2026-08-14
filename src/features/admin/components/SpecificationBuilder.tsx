@@ -22,9 +22,15 @@ export interface SpecSection {
 interface SpecificationBuilderProps {
   value: SpecSection[];
   onChange: (value: SpecSection[]) => void;
+  /** Validation messages keyed by dotted path, e.g. `specifications.0.rows.1.label`. */
+  errors?: Record<string, string>;
 }
 
-export function SpecificationBuilder({ value, onChange }: SpecificationBuilderProps) {
+export function SpecificationBuilder({ value, onChange, errors = {} }: SpecificationBuilderProps) {
+  const sectionError = (secIdx: number, field: string) =>
+    errors[`specifications.${secIdx}.${field}`];
+  const rowError = (secIdx: number, rowIdx: number, field: 'label' | 'value') =>
+    errors[`specifications.${secIdx}.rows.${rowIdx}.${field}`];
   // Add a new section
   const handleAddSection = () => {
     const newSection: SpecSection = {
@@ -174,26 +180,31 @@ export function SpecificationBuilder({ value, onChange }: SpecificationBuilderPr
           {value.map((section, secIdx) => (
             <div
               key={secIdx}
-              className="rounded-card border border-line bg-surface-raised p-4 space-y-4 shadow-sm"
+              className={`rounded-card border bg-surface-raised p-4 space-y-4 shadow-sm ${
+                Object.keys(errors).some((path) => path.startsWith(`specifications.${secIdx}.`))
+                  ? 'border-danger'
+                  : 'border-line'
+              }`}
             >
               {/* Section Header */}
-              <div className="flex items-center gap-3 justify-between">
-                <div className="flex-1 max-w-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
                   <Input
                     type="text"
                     value={section.heading}
                     onChange={(e) => handleUpdateHeading(secIdx, e.target.value)}
                     placeholder="Specification Section Heading (e.g. Dimensions)"
-                    className="font-bold text-sm h-9 bg-surface-sunken/50 focus:bg-surface-raised"
+                    className="font-bold text-sm bg-surface-sunken/50 focus:bg-surface-raised"
+                    error={sectionError(secIdx, 'heading')}
                   />
                 </div>
-                
+
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => handleDeleteSection(secIdx)}
-                  className="text-ink-subtle hover:text-danger hover:bg-rose-50/50 dark:hover:bg-rose-950/20 cursor-pointer h-9 px-3"
+                  className="shrink-0 text-ink-subtle hover:text-danger hover:bg-rose-50/50 dark:hover:bg-rose-950/20 cursor-pointer h-10 px-3"
                 >
                   <Trash2 className="h-4 w-4 mr-1.5" /> Delete Section
                 </Button>
@@ -201,55 +212,68 @@ export function SpecificationBuilder({ value, onChange }: SpecificationBuilderPr
 
               {/* Rows List */}
               <div className="space-y-2 border-t border-line pt-4">
+                {section.rows.length > 0 && (
+                  <div className="hidden gap-2 px-1 pb-1 text-2xs font-bold uppercase tracking-wider text-ink-subtle sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto]">
+                    <span>Label</span>
+                    <span>Value</span>
+                    <span className="w-26" />
+                  </div>
+                )}
                 {section.rows.map((row, rowIdx) => (
-                  <div key={rowIdx} className="flex gap-2 items-center">
+                  <div
+                    key={rowIdx}
+                    className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto] sm:items-start"
+                  >
                     <Input
                       type="text"
                       value={row.label}
                       onChange={(e) => handleUpdateRow(secIdx, rowIdx, 'label', e.target.value)}
                       placeholder="Label (e.g. Item Weight)"
-                      className="flex-1 h-9 text-xs"
+                      error={rowError(secIdx, rowIdx, 'label')}
                     />
                     <Input
                       type="text"
                       value={row.value}
                       onChange={(e) => handleUpdateRow(secIdx, rowIdx, 'value', e.target.value)}
                       placeholder="Value (e.g. 9.25 kg)"
-                      className="flex-2 h-9 text-xs"
+                      error={rowError(secIdx, rowIdx, 'value')}
                     />
 
                     {/* Row Reordering & Deletion Actions */}
-                    <div className="flex items-center gap-0.5 border border-line rounded p-0.5 bg-surface-sunken/30">
-                      <button
-                        type="button"
-                        onClick={() => handleMoveRowUp(secIdx, rowIdx)}
-                        disabled={rowIdx === 0}
-                        className="p-1.5 text-ink-subtle hover:text-ink-muted disabled:opacity-30 dark:hover:text-ink-subtle"
-                        title="Move Row Up"
-                      >
-                        <ArrowUp className="h-3 w-3" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMoveRowDown(secIdx, rowIdx)}
-                        disabled={rowIdx === section.rows.length - 1}
-                        className="p-1.5 text-ink-subtle hover:text-ink-muted disabled:opacity-30 dark:hover:text-ink-subtle"
-                        title="Move Row Down"
-                      >
-                        <ArrowDown className="h-3 w-3" />
-                      </button>
-                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="flex h-10 items-center gap-0.5 rounded border border-line bg-surface-sunken/30 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveRowUp(secIdx, rowIdx)}
+                          disabled={rowIdx === 0}
+                          className="p-1.5 text-ink-subtle hover:text-ink-muted disabled:opacity-30 dark:hover:text-ink-subtle"
+                          title="Move Row Up"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveRowDown(secIdx, rowIdx)}
+                          disabled={rowIdx === section.rows.length - 1}
+                          className="p-1.5 text-ink-subtle hover:text-ink-muted disabled:opacity-30 dark:hover:text-ink-subtle"
+                          title="Move Row Down"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteRow(secIdx, rowIdx)}
-                      className="text-ink-subtle hover:text-danger cursor-pointer h-9 px-2"
-                      title="Delete Row"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteRow(secIdx, rowIdx)}
+                        className="h-10 cursor-pointer px-2 text-ink-subtle hover:text-danger"
+                        title="Delete Row"
+                        aria-label={`Delete row ${rowIdx + 1}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -261,7 +285,7 @@ export function SpecificationBuilder({ value, onChange }: SpecificationBuilderPr
                   variant="outline"
                   size="sm"
                   onClick={() => handleAddRow(secIdx)}
-                  className="h-8 text-2xs font-bold border-dashed text-ink-muted hover:text-ink-muted cursor-pointer"
+                  className="h-9 cursor-pointer border-dashed text-xs font-bold text-ink-muted hover:text-ink-muted"
                 >
                   <Plus className="mr-1 h-3 w-3" /> Add Row
                 </Button>

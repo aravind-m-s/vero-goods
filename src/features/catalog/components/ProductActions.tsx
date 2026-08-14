@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Check, Minus, Plus, ShieldCheck, ShoppingCart, Truck, Zap } from 'lucide-react';
+import { Check, HandHeart, Minus, PackageX, Plus, ShieldCheck, ShoppingCart, Truck, Zap } from 'lucide-react';
 import { useCart } from '@/features/cart/components/CartContext';
-import type { ProductImage, ProductVariant } from '@/features/catalog/types';
+import { ProductMedia } from '@/features/catalog/components/ProductMedia';
+import { GetItForMeDialog } from '@/features/requests/components/GetItForMeDialog';
+import type { ProductImage, ProductVariant, ProductVideo } from '@/features/catalog/types';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { useToast } from '@/shared/ui/toast';
@@ -13,52 +14,61 @@ import { formatMinor } from '@/shared/lib/money';
 import { cn } from '@/shared/lib/utils';
 
 interface ProductActionsProps {
+  productId: string;
   productTitle: string;
   images: ProductImage[];
+  videos: ProductVideo[];
   variants: ProductVariant[];
 }
 
 const MAX_PER_ORDER = 20;
 
-export function ProductActions({ productTitle, images, variants }: ProductActionsProps) {
+export function ProductActions({
+  productId,
+  productTitle,
+  images,
+  videos,
+  variants,
+}: ProductActionsProps) {
   const router = useRouter();
   const { addToCart, startDirectBuy } = useCart();
   const { success, error } = useToast();
 
   const sellable = useMemo(() => variants.filter((variant) => variant.isActive), [variants]);
+  // An out-of-stock product stays fully browsable, so the selection falls back
+  // to an unavailable option rather than blanking the page.
+  const options = sellable.length > 0 ? sellable : variants;
+
   const [selectedId, setSelectedId] = useState(
-    () => sellable.find((v) => v.stockQty > 0 || v.allowBackorder)?.id ?? sellable[0]?.id
+    () => options.find((v) => v.stockQty > 0 || v.allowBackorder)?.id ?? options[0]?.id
   );
   const [quantity, setQuantity] = useState(1);
-  const [activeImage, setActiveImage] = useState(0);
+  const [isRequestOpen, setIsRequestOpen] = useState(false);
 
-  const selected = sellable.find((variant) => variant.id === selectedId);
+  const selected = options.find((variant) => variant.id === selectedId) ?? options[0];
 
-  if (!selected) {
-    return (
-      <div className="rounded-card border border-dashed border-line-strong p-6 text-sm text-ink-muted">
-        This product is currently unavailable.
-      </div>
-    );
-  }
-
-  const showVariantPicker = sellable.length > 1;
-  const maxQuantity = selected.allowBackorder
-    ? MAX_PER_ORDER
-    : Math.min(MAX_PER_ORDER, selected.stockQty);
-  const purchasable = selected.allowBackorder || selected.stockQty > 0;
+  const purchasable = Boolean(
+    selected && selected.isActive && (selected.allowBackorder || selected.stockQty > 0)
+  );
+  const showVariantPicker = options.length > 1;
+  const maxQuantity = !selected
+    ? 1
+    : selected.allowBackorder
+      ? MAX_PER_ORDER
+      : Math.max(1, Math.min(MAX_PER_ORDER, selected.stockQty));
   const discount =
-    selected.compareAtPriceMinor && selected.compareAtPriceMinor > selected.priceMinor
+    selected?.compareAtPriceMinor && selected.compareAtPriceMinor > selected.priceMinor
       ? Math.round(
-        ((selected.compareAtPriceMinor - selected.priceMinor) / selected.compareAtPriceMinor) * 100
-      )
+          ((selected.compareAtPriceMinor - selected.priceMinor) / selected.compareAtPriceMinor) *
+            100
+        )
       : 0;
-  const savedMinor = selected.compareAtPriceMinor
+  const savedMinor = selected?.compareAtPriceMinor
     ? selected.compareAtPriceMinor - selected.priceMinor
     : 0;
 
   const handleAdd = () => {
-    if (!purchasable) {
+    if (!selected || !purchasable) {
       error('This option is out of stock');
       return;
     }
@@ -71,7 +81,7 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
   // Straight to checkout with this item alone. Nothing is written to the cart,
   // so an existing cart is neither charged for nor lost.
   const handleBuyNow = () => {
-    if (!purchasable) {
+    if (!selected || !purchasable) {
       error('This option is out of stock');
       return;
     }
@@ -81,74 +91,47 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12">
-      <div className="space-y-3">
-        <div className="relative aspect-square w-full overflow-hidden rounded-card border border-line bg-surface-raised">
-          {images[activeImage] ? (
-            <Image
-              src={images[activeImage].url}
-              alt={images[activeImage].alt ?? productTitle}
-              fill
-              sizes="(min-width: 1024px) 50vw, 100vw"
-              className="object-cover"
-              // Main product image is the LCP element on this page.
-              priority
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-ink-subtle">
-              No image
-            </div>
-          )}
-          {discount > 0 && (
-            <div className="absolute left-4 top-4">
-              <Badge variant="accent">{discount}% off</Badge>
-            </div>
-          )}
-        </div>
-
-        {images.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {images.map((image, index) => (
-              <button
-                key={image.id}
-                type="button"
-                onClick={() => setActiveImage(index)}
-                aria-label={`Show image ${index + 1} of ${images.length}`}
-                aria-current={index === activeImage}
-                className={cn(
-                  'relative h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-control border-2 transition-colors',
-                  index === activeImage
-                    ? 'border-accent'
-                    : 'border-line hover:border-line-strong'
-                )}
-              >
-                <Image src={image.url} alt="" fill sizes="64px" className="object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <ProductMedia
+        productTitle={productTitle}
+        images={images}
+        videos={videos}
+        badge={
+          <>
+            {discount > 0 && purchasable && <Badge variant="accent">{discount}% off</Badge>}
+            {!purchasable && <Badge variant="danger">Out of stock</Badge>}
+          </>
+        }
+      />
 
       <div className="space-y-6">
-        <div>
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="text-3xl font-black tracking-tight text-ink tabular-nums sm:text-4xl">
-              {formatMinor(selected.priceMinor)}
-            </span>
-            {selected.compareAtPriceMinor && selected.compareAtPriceMinor > selected.priceMinor && (
-              <span className="text-base text-ink-subtle line-through tabular-nums">
-                {formatMinor(selected.compareAtPriceMinor)}
+        {selected ? (
+          <div>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="text-3xl font-black tracking-tight text-ink tabular-nums sm:text-4xl">
+                {formatMinor(selected.priceMinor)}
               </span>
+              {selected.compareAtPriceMinor &&
+                selected.compareAtPriceMinor > selected.priceMinor && (
+                  <span className="text-base text-ink-subtle line-through tabular-nums">
+                    {formatMinor(selected.compareAtPriceMinor)}
+                  </span>
+                )}
+            </div>
+            {savedMinor > 0 && (
+              <p className="mt-1.5 text-sm font-semibold text-accent">
+                You save {formatMinor(savedMinor)}
+              </p>
             )}
-          </div>
-          {savedMinor > 0 && (
-            <p className="mt-1.5 text-sm font-semibold text-accent">
-              You save {formatMinor(savedMinor)}
+            <p className="mt-1 text-xs text-ink-subtle">
+              Inclusive of all taxes ·{' '}
+              {purchasable ? 'Dispatched in 1–4 working days' : 'Currently unavailable to order'}
             </p>
-          )}
-          <p className="mt-1 text-xs text-ink-subtle">
-            Inclusive of all taxes · Dispatched in 1–4 working days
+          </div>
+        ) : (
+          <p className="text-sm text-ink-muted">
+            This product has no purchasable options right now.
           </p>
-        </div>
+        )}
 
         {showVariantPicker && (
           <fieldset className="space-y-2.5">
@@ -156,8 +139,9 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
               Choose an option
             </legend>
             <div className="flex flex-wrap gap-2">
-              {sellable.map((variant) => {
-                const available = variant.allowBackorder || variant.stockQty > 0;
+              {options.map((variant) => {
+                const available =
+                  variant.isActive && (variant.allowBackorder || variant.stockQty > 0);
                 return (
                   <button
                     key={variant.id}
@@ -166,17 +150,21 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
                       setSelectedId(variant.id);
                       setQuantity(1);
                     }}
-                    disabled={!available}
-                    aria-pressed={variant.id === selected.id}
+                    aria-pressed={variant.id === selected?.id}
+                    // Unavailable options stay selectable: that is how a
+                    // customer asks us to source that exact option.
                     className={cn(
-                      'cursor-pointer rounded-control border px-3.5 py-2 text-xs font-semibold transition-colors',
-                      variant.id === selected.id
+                      'flex cursor-pointer items-center gap-1.5 rounded-control border px-3.5 py-2 text-xs font-semibold transition-colors',
+                      variant.id === selected?.id
                         ? 'border-accent bg-accent-soft text-accent-ink'
                         : 'border-line-strong text-ink-muted hover:border-ink-subtle hover:text-ink',
-                      !available && 'cursor-not-allowed line-through opacity-40'
+                      !available && 'opacity-70'
                     )}
                   >
                     {variant.name}
+                    {!available && (
+                      <span className="text-3xs font-medium text-danger">· out of stock</span>
+                    )}
                   </button>
                 );
               })}
@@ -184,11 +172,11 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
           </fieldset>
         )}
 
-        <StockLine variant={selected} />
+        {selected && <StockLine variant={selected} />}
 
-        {/* Stepper and Add to cart share one row at every width — stacking them
-            on mobile left a stubby quantity box floating above a full-width
-            button. Buy now sits below, full width, where a thumb reaches. */}
+        {/* Stepper and the primary CTA share one row at every width. In stock
+            that CTA is Add to cart; out of stock it becomes Get it for me, so
+            the page never dead-ends. */}
         <div className="space-y-3">
           <div className="flex items-stretch gap-3">
             <div className="flex h-12 shrink-0 items-center rounded-control border border-line-strong">
@@ -213,54 +201,75 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
               </button>
             </div>
 
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={handleAdd}
-              disabled={!purchasable}
-              className="min-w-0 flex-1"
-            >
-              <ShoppingCart className="h-4 w-4 shrink-0" />
-              <span className="truncate">{purchasable ? 'Add to cart' : 'Out of stock'}</span>
-            </Button>
+            {purchasable ? (
+              <Button variant="outline" size="lg" onClick={handleAdd} className="min-w-0 flex-1">
+                <ShoppingCart className="h-4 w-4 shrink-0" />
+                <span className="truncate">Add to cart</span>
+              </Button>
+            ) : (
+              <Button
+                variant="accent"
+                size="lg"
+                onClick={() => setIsRequestOpen(true)}
+                className="min-w-0 flex-1"
+              >
+                <HandHeart className="h-4 w-4 shrink-0" />
+                <span className="truncate">Get it for me</span>
+              </Button>
+            )}
           </div>
 
-          <Button
-            variant="accent"
-            size="lg"
-            onClick={handleBuyNow}
-            disabled={!purchasable}
-            className="w-full"
-          >
-            <Zap className="h-4 w-4 shrink-0" />
-            Buy now · {formatMinor(selected.priceMinor * quantity)}
-          </Button>
+          {purchasable ? (
+            <Button variant="accent" size="lg" onClick={handleBuyNow} className="w-full">
+              <Zap className="h-4 w-4 shrink-0" />
+              Buy now · {formatMinor((selected?.priceMinor ?? 0) * quantity)}
+            </Button>
+          ) : (
+            <p className="text-2xs leading-relaxed text-ink-subtle">
+              Tell us you want it and our team will try to source it from our suppliers. No payment
+              now — we contact you first with price and timeline.
+            </p>
+          )}
         </div>
 
-        <dl className="space-y-2.5 rounded-card border border-line bg-surface-raised p-4 text-xs">
-          <Row label="SKU" value={<span className="font-mono">{selected.sku}</span>} />
-          <Row
-            label={
-              <span className="flex items-center gap-1.5">
-                <Truck className="h-3.5 w-3.5" /> Dispatch
-              </span>
-            }
-            value={
-              selected.supplier.leadTimeDays === 0
-                ? 'Same working day'
-                : `In ${selected.supplier.leadTimeDays} working day${selected.supplier.leadTimeDays > 1 ? 's' : ''}`
-            }
-          />
-          <Row
-            label={
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5" /> Replacement
-              </span>
-            }
-            value="24 hours, Pack opening video required"
-          />
-        </dl>
+        {selected && (
+          <dl className="space-y-2.5 rounded-card border border-line bg-surface-raised p-4 text-xs">
+            <Row label="SKU" value={<span className="font-mono">{selected.sku}</span>} />
+            <Row
+              label={
+                <span className="flex items-center gap-1.5">
+                  <Truck className="h-3.5 w-3.5" /> Dispatch
+                </span>
+              }
+              value={
+                !purchasable
+                  ? 'On request'
+                  : selected.supplier.leadTimeDays === 0
+                    ? 'Same working day'
+                    : `In ${selected.supplier.leadTimeDays} working day${selected.supplier.leadTimeDays > 1 ? 's' : ''}`
+              }
+            />
+            <Row
+              label={
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Replacement
+                </span>
+              }
+              value="24 hours, Pack opening video required"
+            />
+          </dl>
+        )}
       </div>
+
+      <GetItForMeDialog
+        open={isRequestOpen}
+        onClose={() => setIsRequestOpen(false)}
+        productId={productId}
+        productTitle={productTitle}
+        variantId={selected?.id}
+        variantName={selected?.name}
+        quantity={quantity}
+      />
     </div>
   );
 }
@@ -275,14 +284,14 @@ function Row({ label, value }: { label: React.ReactNode; value: React.ReactNode 
 }
 
 function StockLine({ variant }: { variant: ProductVariant }) {
-  if (variant.stockQty > 5) {
+  if (variant.isActive && variant.stockQty > 5) {
     return (
       <p className="flex items-center gap-1.5 text-xs font-semibold text-success">
         <Check className="h-4 w-4" /> In stock, ready to dispatch
       </p>
     );
   }
-  if (variant.stockQty > 0) {
+  if (variant.isActive && variant.stockQty > 0) {
     return (
       <p className="flex items-center gap-1.5 text-xs font-semibold text-warning">
         <span className="relative flex h-2 w-2">
@@ -293,12 +302,16 @@ function StockLine({ variant }: { variant: ProductVariant }) {
       </p>
     );
   }
-  if (variant.allowBackorder) {
+  if (variant.isActive && variant.allowBackorder) {
     return (
       <p className="text-xs font-semibold text-warning">
         On backorder — ships in about {variant.supplier.leadTimeDays} days
       </p>
     );
   }
-  return <p className="text-xs font-semibold text-danger">Out of stock</p>;
+  return (
+    <p className="flex items-center gap-1.5 text-xs font-semibold text-danger">
+      <PackageX className="h-4 w-4" /> Out of stock
+    </p>
+  );
 }

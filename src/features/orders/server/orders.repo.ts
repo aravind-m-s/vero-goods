@@ -8,7 +8,7 @@ import {
   stripIds,
   variantsCollection,
 } from '@/shared/db/collections';
-import { ALLOWED_STATUS_TRANSITIONS, OrderStatus, PaymentStatus, type Order, type OrderItem, type OrderStatusEvent } from '@/features/orders/types';
+import { ALLOWED_STATUS_TRANSITIONS, OrderStatus, PaymentStatus, type Order, type OrderItem } from '@/features/orders/types';
 
 export async function getOrderById(id: string): Promise<Order | null> {
   const orders = await ordersCollection();
@@ -68,6 +68,34 @@ export async function listOrders(opts: {
   ]);
 
   return { orders: stripIds(docs), total };
+}
+
+/** One customer's own order history, newest first. Always scoped by `userId`. */
+export async function listCustomerOrders(
+  userId: string,
+  opts: { page?: number; pageSize?: number } = {}
+): Promise<OrderPage> {
+  const orders = await ordersCollection();
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(50, Math.max(1, opts.pageSize ?? 10));
+
+  const [docs, total] = await Promise.all([
+    orders
+      .find({ userId })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .toArray(),
+    orders.countDocuments({ userId }),
+  ]);
+
+  return { orders: stripIds(docs), total };
+}
+
+/** Reads an order only if it belongs to this customer. */
+export async function getCustomerOrder(userId: string, orderId: string): Promise<Order | null> {
+  const orders = await ordersCollection();
+  return stripId(await orders.findOne({ id: orderId, userId }));
 }
 
 /** Streams matching orders for CSV export without loading the collection into memory. */
@@ -209,6 +237,10 @@ export async function attachRazorpayOrderId(
  * callback and the Razorpay webhook race each other by design, and whichever
  * arrives second is a no-op rather than a double-processing.
  * Returns the updated order, or null if it was already paid.
+ *
+ * Payment settles the money only — `orderStatus` is deliberately left alone.
+ * Confirming an order is a human decision (stock actually on hand, address
+ * sane, fraud check), so it stays PLACED until an admin moves it to CONFIRMED.
  */
 export async function markOrderPaid(
   orderId: string,
@@ -217,25 +249,34 @@ export async function markOrderPaid(
 ): Promise<Order | null> {
   const orders = await ordersCollection();
   const now = new Date().toISOString();
-  const event: OrderStatusEvent = {
-    status: OrderStatus.CONFIRMED,
-    at: now,
-    by: 'system',
-    note: `Payment ${razorpayPaymentId} verified`,
-  };
 
   const result = await orders.findOneAndUpdate(
     { id: orderId, paymentStatus: { $ne: PaymentStatus.PAID } },
-    {
-      $set: {
-        paymentStatus: PaymentStatus.PAID,
-        orderStatus: OrderStatus.CONFIRMED,
-        razorpayPaymentId,
-        razorpayOrderId,
-        updatedAt: now,
+    // Pipeline update: the history entry records the status the order is
+    // already in, so a payment never reads as a fulfilment step.
+    [
+      {
+        $set: {
+          paymentStatus: PaymentStatus.PAID,
+          razorpayPaymentId,
+          razorpayOrderId,
+          updatedAt: now,
+          statusHistory: {
+            $concatArrays: [
+              { $ifNull: ['$statusHistory', []] },
+              [
+                {
+                  status: '$orderStatus',
+                  at: now,
+                  by: 'system',
+                  note: `Payment ${razorpayPaymentId} verified`,
+                },
+              ],
+            ],
+          },
+        },
       },
-      $push: { statusHistory: event },
-    },
+    ],
     { returnDocument: 'after' }
   );
 
@@ -267,6 +308,13 @@ export class InvalidTransitionError extends Error {
   }
 }
 
+export class PaymentNotSettledError extends Error {
+  constructor(orderNumber: string) {
+    super(`Order ${orderNumber} cannot be confirmed until its payment is captured`);
+    this.name = 'PaymentNotSettledError';
+  }
+}
+
 export interface StatusUpdateInput {
   status: OrderStatus;
   by: string;
@@ -284,6 +332,16 @@ export async function updateOrderStatus(
 
   if (!ALLOWED_STATUS_TRANSITIONS[current.orderStatus].includes(input.status)) {
     throw new InvalidTransitionError(current.orderStatus, input.status);
+  }
+
+  // Prepaid orders are only confirmable once the money is actually captured;
+  // COD collects at delivery, so it confirms on the admin's judgement alone.
+  if (
+    input.status === OrderStatus.CONFIRMED &&
+    current.paymentMethod !== 'COD' &&
+    current.paymentStatus !== PaymentStatus.PAID
+  ) {
+    throw new PaymentNotSettledError(current.orderNumber);
   }
 
   const now = new Date().toISOString();

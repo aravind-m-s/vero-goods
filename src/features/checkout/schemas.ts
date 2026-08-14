@@ -34,6 +34,12 @@ export const CartItemSchema = z.object({
 export const CreateOrderSchema = z.object({
   name: z.string().min(2).max(120),
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian mobile number'),
+  /**
+   * Where the receipt goes. Optional because a customer who signed in with a
+   * mobile number may have no email on file; the session address is used when
+   * this is absent. Never written back to the account — it is unverified.
+   */
+  email: z.email('Invalid email address').optional(),
   shippingAddress: AddressSchema,
   paymentMethod: z.enum(['COD', 'RAZORPAY']),
   items: z.array(CartItemSchema).min(1, 'Cart is empty').max(50),

@@ -1,9 +1,19 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import Image from 'next/image';
+import { SafeImage as Image } from '@/shared/ui/safe-image';
 import Link from 'next/link';
-import { Archive, Copy, Edit2, ExternalLink, Eye, EyeOff, Plus, Search } from 'lucide-react';
+import {
+  Archive,
+  Copy,
+  Edit2,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import {
@@ -49,6 +59,9 @@ export default function AdminProductsPage() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [toArchive, setToArchive] = useState<AdminProductRow | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [toDelete, setToDelete] = useState<AdminProductRow | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +137,34 @@ export default function AdminProductsPage() {
       error('Network error');
     } finally {
       setIsArchiving(false);
+    }
+  };
+
+  const closeDeleteDialog = () => {
+    setToDelete(null);
+    setDeleteConfirmText('');
+  };
+
+  const handleDelete = async () => {
+    if (!toDelete) return;
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/admin/products?id=${toDelete.id}&mode=delete`, {
+        method: 'DELETE',
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        // 409 means order items still reference it — archiving is the way out.
+        error(data.error ?? 'Could not delete the product');
+        return;
+      }
+      setProducts((prev) => prev.filter((item) => item.id !== toDelete.id));
+      success(`${toDelete.title} deleted permanently`);
+      closeDeleteDialog();
+    } catch {
+      error('Network error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -314,7 +355,18 @@ export default function AdminProductsPage() {
                           label="Archive"
                           onClick={() => setToArchive(product)}
                         >
-                          <Archive className="h-3.5 w-3.5 text-danger" />
+                          <Archive className="h-3.5 w-3.5 text-warning" />
+                        </IconButton>
+
+                        <IconButton
+                          size="icon"
+                          label="Delete permanently"
+                          onClick={() => {
+                            setDeleteConfirmText('');
+                            setToDelete(product);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-danger" />
                         </IconButton>
                       </div>
                     </TableCell>
@@ -341,6 +393,48 @@ export default function AdminProductsPage() {
             </Button>
             <Button variant="danger" onClick={handleArchive} isLoading={isArchiving}>
               Archive product
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={toDelete !== null} onClose={closeDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {toDelete?.title} permanently?</DialogTitle>
+            <DialogDescription>
+              This removes the product, its {toDelete?.variantCount} variant
+              {toDelete?.variantCount === 1 ? '' : 's'}, images and specifications from the
+              database. It cannot be undone. Products that appear on any past order cannot be
+              deleted — archive those instead.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 pb-2">
+            <p className="text-xs text-ink-muted">
+              Type <span className="font-mono font-bold text-ink">{toDelete?.slug}</span> to
+              confirm.
+            </p>
+            <Input
+              value={deleteConfirmText}
+              onChange={(event) => setDeleteConfirmText(event.target.value)}
+              placeholder={toDelete?.slug}
+              className="font-mono text-xs"
+              autoComplete="off"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDeleteDialog}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              isLoading={isDeleting}
+              disabled={deleteConfirmText.trim() !== toDelete?.slug}
+            >
+              Delete permanently
             </Button>
           </DialogFooter>
         </DialogContent>

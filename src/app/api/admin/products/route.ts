@@ -4,12 +4,13 @@ import { toProductWriteInput } from '@/features/admin/server/product-input';
 import {
   archiveProduct,
   createProduct,
+  deleteProduct,
   listAdminProducts,
   setProductActive,
   skuExists,
   slugExists,
 } from '@/features/catalog/server/products.repo';
-import { ProductFormSchema } from '@/features/catalog/schemas';
+import { ProductFormSchema, issuesToFieldErrors } from '@/features/catalog/schemas';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
     const parsed = ProductFormSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Validation failed', details: parsed.error.flatten() },
+        { error: 'Validation failed', fieldErrors: issuesToFieldErrors(parsed.error) },
         { status: 400 }
       );
     }
@@ -62,16 +63,41 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Archive (soft delete). Hard deletion is not offered: order items, invoices
- * and returns reference the product long after it leaves the catalogue.
+ * `?mode=archive` (default) soft-deletes: the product stays in the database so
+ * invoices, returns and reporting keep resolving. `?mode=delete` hard-deletes,
+ * and is refused with 409 once any order item references the product.
  */
 export async function DELETE(request: NextRequest) {
   const denied = await requireAdmin();
   if (denied) return denied;
 
-  const id = new URL(request.url).searchParams.get('id');
+  const params = new URL(request.url).searchParams;
+  const id = params.get('id');
+  const mode = params.get('mode') === 'delete' ? 'delete' : 'archive';
   if (!id) {
     return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
+  }
+
+  if (mode === 'delete') {
+    const result = await deleteProduct(id);
+    if (result.status === 'not-found') {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+    if (result.status === 'referenced') {
+      return NextResponse.json(
+        {
+          error: `${result.product.title} appears on ${result.orderItemCount} order item${
+            result.orderItemCount === 1 ? '' : 's'
+          } and cannot be deleted. Archive it instead.`,
+          orderItemCount: result.orderItemCount,
+        },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({
+      success: true,
+      message: `${result.product.title} deleted permanently`,
+    });
   }
 
   const product = await archiveProduct(id);

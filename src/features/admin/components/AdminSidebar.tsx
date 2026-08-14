@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, LogOut, Receipt, ShoppingBag, Store } from 'lucide-react';
+import { HandHeart, LayoutDashboard, LogOut, Receipt, ShoppingBag, Store } from 'lucide-react';
 import { ThemeToggle } from '@/shared/ui/theme-toggle';
 import { cn } from '@/shared/lib/utils';
 
@@ -16,6 +16,7 @@ const MENU = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/admin', exact: true },
   { label: 'Products', icon: ShoppingBag, href: '/admin/products', exact: false },
   { label: 'Orders', icon: Receipt, href: '/admin/orders', exact: false },
+  { label: 'Sourcing requests', icon: HandHeart, href: '/admin/requests', exact: false },
 ];
 
 export function AdminSidebar() {

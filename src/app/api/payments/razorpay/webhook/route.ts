@@ -10,7 +10,7 @@ import {
   setInvoiceNumber,
 } from '@/features/orders/server/orders.repo';
 import { sendEmail } from '@/shared/email/send';
-import { orderConfirmationEmail } from '@/shared/email/templates';
+import { orderReceivedEmail } from '@/shared/email/templates';
 import { verifyWebhookSignature } from '@/features/payments/server/razorpay';
 
 export const dynamic = 'force-dynamic';
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
           const invoiceNumber = await nextInvoiceNumber();
           await setInvoiceNumber(paid.id, invoiceNumber);
           const items = await getOrderItems(paid.id);
-          await sendEmail(orderConfirmationEmail({ ...paid, invoiceNumber }, items));
+          await sendEmail(orderReceivedEmail({ ...paid, invoiceNumber }, items));
         }
         break;
       }

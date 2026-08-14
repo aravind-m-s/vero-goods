@@ -14,7 +14,7 @@ import { updateCustomerContact } from '@/features/auth/server/users.repo';
 import { CURRENCY } from '@/features/catalog/types';
 import { OrderStatus, PaymentStatus, type Order, type OrderItem } from '@/features/orders/types';
 import { sendEmail } from '@/shared/email/send';
-import { orderConfirmationEmail } from '@/shared/email/templates';
+import { orderReceivedEmail } from '@/shared/email/templates';
 import { COD_MAX_ORDER_MINOR, calculateTotals, estimateDeliveryDate } from '@/features/checkout/server/pricing';
 import { formatMinor } from '@/shared/lib/money';
 import { clientIp, rateLimit } from '@/shared/lib/rate-limit';
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
       id: orderId,
       orderNumber: await nextOrderNumber(),
       userId: customer.id,
-      email: customer.email,
+      email: input.email ?? customer.email ?? '',
       customerName: input.name,
       phone: input.phone,
       shippingAddress: input.shippingAddress,
@@ -203,9 +203,10 @@ export async function POST(request: NextRequest) {
     await insertOrder(order, items);
     await updateCustomerContact(customer.id, { name: input.name, phone: input.phone });
 
-    // COD orders are confirmed immediately; online orders wait for payment.
+    // COD gets its receipt now; online orders get theirs once payment settles.
+    // Neither is "confirmed" — an admin does that from the orders screen.
     if (order.paymentMethod === 'COD') {
-      await sendEmail(orderConfirmationEmail(order, items));
+      await sendEmail(orderReceivedEmail(order, items));
     }
 
     return NextResponse.json({
