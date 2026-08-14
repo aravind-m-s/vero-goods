@@ -76,7 +76,14 @@ export function CheckoutView() {
   const { success: showSuccess, error: showError } = useToast();
 
   const [customer, setCustomer] = useState<PublicUser | null>(null);
-  const [authStep, setAuthStep] = useState<'signin' | 'verified'>('signin');
+  /**
+   * `restoring` until the session cookie has been checked *and*, for a signed-in
+   * customer, their addresses have arrived. Starting at `signin` flashed the
+   * login panel at every returning customer on every refresh, then replaced it
+   * with an empty address list, then with the default address — three layouts
+   * for what is one already-decided state.
+   */
+  const [sessionState, setSessionState] = useState<'restoring' | 'guest' | 'verified'>('restoring');
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   /** Opens the address fields on top of an existing list. */
@@ -124,34 +131,62 @@ export function CheckoutView() {
     setIsAddingAddress(false);
   }, []);
 
-  const loadSession = useCallback(async () => {
+  /**
+   * Restores the whole checkout in one pass: session, then addresses, then the
+   * choices made before the refresh. Nothing is rendered until it settles, so a
+   * returning customer sees the skeleton and then the finished page — never the
+   * login panel they already got past.
+   */
+  const restoreCheckout = useCallback(async () => {
+    const prefs = readCheckoutPrefs();
+    if (prefs.paymentMethod) setValue('paymentMethod', prefs.paymentMethod);
+
     try {
       const response = await fetch('/api/auth/otp');
-      if (!response.ok) return;
-      const data = (await response.json()) as { user: PublicUser | null };
-      if (!data.user) return;
+      const data = response.ok ? ((await response.json()) as { user: PublicUser | null }) : null;
+
+      // No session, or one the server has since expired: sign-in is genuinely
+      // needed, and only now is it shown.
+      if (!data?.user) {
+        setSessionState('guest');
+        return;
+      }
 
       setCustomer(data.user);
-      setAuthStep('verified');
       setValue('email', data.user.email ?? '');
 
       // Saved addresses turn checkout into two clicks for a returning customer:
       // pick a card, pay. No address fields are shown at all.
       const addressResponse = await fetch('/api/account/addresses');
-      if (!addressResponse.ok) return;
-      const addressData = (await addressResponse.json()) as { addresses: Address[] };
-      setSavedAddresses(addressData.addresses);
+      const addresses = addressResponse.ok
+        ? ((await addressResponse.json()) as { addresses: Address[] }).addresses
+        : [];
+      setSavedAddresses(addresses);
 
-      const preferred = addressData.addresses.find((item) => item.isDefault);
-      setSelectedAddressId((current) => current || preferred?.id || addressData.addresses[0]?.id || '');
+      // The address chosen before the refresh wins, but only while it still
+      // exists — it may have been deleted from the address book meanwhile.
+      const remembered = addresses.find((item) => item.id === prefs.addressId);
+      const preferred = remembered ?? addresses.find((item) => item.isDefault) ?? addresses[0];
+      setSelectedAddressId(preferred?.id ?? '');
     } catch {
-      // Not signed in — the auth panel handles it.
+      // The session could not be checked at all. Treat it as signed out rather
+      // than stranding the customer on a spinner.
+      setSessionState('guest');
+      return;
     }
+
+    setSessionState('verified');
   }, [setValue]);
 
   useEffect(() => {
-    void loadSession();
-  }, [loadSession]);
+    void restoreCheckout();
+  }, [restoreCheckout]);
+
+  // Remember the choices so a refresh mid-checkout costs nothing.
+  useEffect(() => {
+    if (sessionState !== 'verified') return;
+    writeCheckoutPrefs({ addressId: selectedAddressId, paymentMethod });
+  }, [sessionState, selectedAddressId, paymentMethod]);
 
   const goToSuccess = (trackingToken: string, orderNumber: string) => {
     clearPurchased();
@@ -250,7 +285,7 @@ export function CheckoutView() {
           // address even if the saved one is edited or deleted later.
           shippingAddress: {
             line1: selectedAddress.line1,
-            line2: selectedAddress.line2,
+            line2: selectedAddress.line2 ?? undefined,
             city: selectedAddress.city,
             state: selectedAddress.state,
             pinCode: selectedAddress.pinCode,
@@ -321,6 +356,10 @@ export function CheckoutView() {
     }
   };
 
+  // The cart lives in localStorage and the session in a cookie; neither is
+  // readable during the first render. One skeleton covers both.
+  const isRestoring = sessionState === 'restoring' || !isHydrated;
+
   if (isHydrated && cartCount === 0 && !isPlacingOrder) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-3 px-4 py-24 text-center">
@@ -353,12 +392,17 @@ export function CheckoutView() {
           Checkout
         </h1>
         <ol className="mt-3 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide sm:mt-4 sm:gap-2">
-          <Step index={1} label="Verify" active={authStep !== 'verified'} done={authStep === 'verified'} />
+          <Step
+            index={1}
+            label="Verify"
+            active={sessionState === 'guest'}
+            done={sessionState === 'verified'}
+          />
           <span aria-hidden="true" className="h-px w-4 bg-line-strong sm:w-6" />
           <Step
             index={2}
             label="Address"
-            active={authStep === 'verified' && !selectedAddress}
+            active={sessionState === 'verified' && !selectedAddress}
             done={Boolean(selectedAddress)}
           />
           <span aria-hidden="true" className="h-px w-4 bg-line-strong sm:w-6" />
@@ -366,7 +410,9 @@ export function CheckoutView() {
         </ol>
       </header>
 
-      {authStep !== 'verified' ? (
+      {isRestoring ? (
+        <CheckoutSkeleton />
+      ) : sessionState === 'guest' ? (
         <AuthView next="/checkout" compact />
       ) : (
         // Not a <form>: the address panel has its own form for saving a new
@@ -614,6 +660,101 @@ export function CheckoutView() {
       </Dialog>
     </div>
   );
+}
+
+/**
+ * Address and payment choices survive a refresh. Session storage, not local:
+ * they belong to this checkout in this tab, and a stale pick should not follow
+ * the customer into next week's order.
+ */
+const PREFS_KEY = 'vero.checkout.prefs.v1';
+
+interface CheckoutPrefs {
+  addressId?: string;
+  paymentMethod?: 'COD' | 'RAZORPAY';
+}
+
+function readCheckoutPrefs(): CheckoutPrefs {
+  try {
+    const raw = sessionStorage.getItem(PREFS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as CheckoutPrefs;
+    return {
+      addressId: typeof parsed.addressId === 'string' ? parsed.addressId : undefined,
+      paymentMethod:
+        parsed.paymentMethod === 'COD' || parsed.paymentMethod === 'RAZORPAY'
+          ? parsed.paymentMethod
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function writeCheckoutPrefs(prefs: CheckoutPrefs): void {
+  try {
+    sessionStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // Private browsing or a full quota. Losing the preference is not an error
+    // worth interrupting a checkout for.
+  }
+}
+
+/**
+ * Shown while the session and addresses are being restored. It mirrors the real
+ * layout, so the page does not jump when the content lands.
+ */
+function CheckoutSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12"
+    >
+      <span className="sr-only">Loading your checkout details</span>
+      <div className="space-y-6 lg:col-span-7">
+        <Card>
+          <CardHeader>
+            <Bar className="h-4 w-40" />
+            <Bar className="mt-2 h-3 w-56" />
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Bar className="h-24 w-full" />
+            <Bar className="h-24 w-full" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <Bar className="h-4 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            <Bar className="h-14 w-full" />
+            <Bar className="h-14 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+      <div className="lg:col-span-5">
+        <Card>
+          <CardHeader>
+            <Bar className="h-4 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Bar className="h-3 w-full" />
+            <Bar className="h-3 w-4/5" />
+            <Bar className="h-3 w-2/3" />
+            <Separator />
+            <Bar className="h-6 w-full" />
+            <Bar className="h-11 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Bar({ className }: { className?: string }) {
+  return <span className={cn('block animate-pulse rounded bg-surface-sunken', className)} />;
 }
 
 function loadRazorpayScript(): Promise<boolean> {
