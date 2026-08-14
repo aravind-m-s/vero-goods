@@ -181,7 +181,13 @@ export async function POST(request: NextRequest) {
       email: input.email ?? customer.email ?? '',
       customerName: input.name,
       phone: input.phone,
-      shippingAddress: input.shippingAddress,
+      // Snapshot, not a pointer: the recipient details are copied in so a later
+      // edit or deletion of the saved address cannot rewrite this order.
+      shippingAddress: {
+        ...input.shippingAddress,
+        fullName: input.shippingAddress.fullName ?? input.name,
+        phone: input.shippingAddress.phone ?? input.phone,
+      },
       subtotalMinor: totals.subtotalMinor,
       shippingMinor: totals.shippingMinor,
       codFeeMinor: totals.codFeeMinor,

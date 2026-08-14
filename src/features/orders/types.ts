@@ -1,5 +1,10 @@
 // Order domain types. Pure — safe in both Client and Server Components.
 
+/**
+ * Frozen copy of the address the order was placed with. It is a snapshot, never
+ * a reference: editing or deleting the saved address it was copied from leaves
+ * every past order showing exactly what it shipped to.
+ */
 export interface OrderAddress {
   line1: string;
   line2?: string;
@@ -7,6 +12,20 @@ export interface OrderAddress {
   state: string;
   pinCode: string;
   country: string;
+  /**
+   * Recipient details captured with the address. Optional only because orders
+   * placed before the snapshot carried them fall back to the order-level
+   * `customerName` / `phone`.
+   */
+  fullName?: string;
+  phone?: string;
+  /** What the customer called the address at the time — "Home", "Office". */
+  label?: string;
+  /**
+   * Which saved address it was copied from. Informational only — nothing reads
+   * the address book to render an order.
+   */
+  sourceAddressId?: string;
 }
 
 export enum OrderStatus {
