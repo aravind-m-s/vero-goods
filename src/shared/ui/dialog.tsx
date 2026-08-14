@@ -15,6 +15,18 @@ export interface DialogProps {
 export function Dialog({ open, onClose, children, label }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * Callers pass an inline `onClose`, so it is a new function on every render.
+   * Held in a ref, the effect below can depend on `open` alone — with `onClose`
+   * in the dependency array it tore down and re-ran on every keystroke, moving
+   * focus back to the top of the dialog mid-word and dismissing the keyboard on
+   * phones.
+   */
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -25,7 +37,7 @@ export function Dialog({ open, onClose, children, label }: DialogProps) {
     // focus wander behind it is unusable with a keyboard or screen reader.
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab' || !panelRef.current) return;
@@ -47,19 +59,35 @@ export function Dialog({ open, onClose, children, label }: DialogProps) {
     };
 
     document.addEventListener('keydown', onKeyDown);
-    panelRef.current?.focus();
+
+    // Focus the first real field, not the panel. On a phone, focusing the panel
+    // means the on-screen keyboard opens only after a second tap, and the tap
+    // that opens it scrolls the field somewhere the keyboard is already
+    // covering. Falling back to the panel keeps dialogs without inputs sane.
+    const firstField = panelRef.current?.querySelector<HTMLElement>(
+      'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])'
+    );
+    if (firstField) {
+      firstField.focus({ preventScroll: true });
+      firstField.scrollIntoView({ block: 'center' });
+    } else {
+      panelRef.current?.focus();
+    }
 
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = '';
       previouslyFocused?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    // Bottom sheet on phones, centred panel from `sm` up. Anchoring to the
+    // bottom means the on-screen keyboard pushes the sheet up instead of
+    // covering the field being typed into; `dvh` tracks the shrinking viewport.
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div
         className="animate-fade-in fixed inset-0 bg-black/50 backdrop-blur-[2px]"
         onClick={onClose}
@@ -71,7 +99,7 @@ export function Dialog({ open, onClose, children, label }: DialogProps) {
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className="animate-scale-in relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-panel border border-line bg-surface-raised shadow-overlay focus:outline-none"
+        className="animate-scale-in relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-panel rounded-b-none border border-line bg-surface-raised pb-[env(safe-area-inset-bottom)] shadow-overlay focus:outline-none sm:max-h-[90dvh] sm:rounded-panel sm:pb-0"
       >
         {children}
         <button

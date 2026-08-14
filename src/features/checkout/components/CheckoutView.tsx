@@ -320,26 +320,30 @@ export function CheckoutView() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 sm:px-6 lg:px-8">
-      <header className="mb-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+      {/* Tighter on phones: the sign-in card used to start most of a screen
+          down, under a full-size title and a wide step rail. */}
+      <header className="mb-4 sm:mb-8">
         <Link
           href="/"
           className="inline-flex items-center gap-1 text-xs text-ink-subtle transition-colors hover:text-accent"
         >
           <ArrowLeft className="h-3 w-3" /> Continue shopping
         </Link>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink sm:text-3xl">Checkout</h1>
-        <ol className="mt-4 flex items-center gap-2 text-2xs font-semibold uppercase tracking-wide">
+        <h1 className="mt-1.5 text-xl font-bold tracking-tight text-ink sm:mt-2 sm:text-3xl">
+          Checkout
+        </h1>
+        <ol className="mt-3 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide sm:mt-4 sm:gap-2">
           <Step index={1} label="Verify" active={authStep !== 'verified'} done={authStep === 'verified'} />
-          <span aria-hidden="true" className="h-px w-6 bg-line-strong" />
+          <span aria-hidden="true" className="h-px w-4 bg-line-strong sm:w-6" />
           <Step index={2} label="Address" active={authStep === 'verified'} done={false} />
-          <span aria-hidden="true" className="h-px w-6 bg-line-strong" />
+          <span aria-hidden="true" className="h-px w-4 bg-line-strong sm:w-6" />
           <Step index={3} label="Pay" active={false} done={false} />
         </ol>
       </header>
 
       {authStep !== 'verified' ? (
-        <AuthView next="/checkout" />
+        <AuthView next="/checkout" compact />
       ) : (
         <form
           onSubmit={handleSubmit(onSubmit)}

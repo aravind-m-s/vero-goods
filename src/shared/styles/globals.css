@@ -538,3 +538,13 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-subtle);
 }
+
+/* Horizontal rails (the account nav on phones) scroll by swipe; a 10px
+   scrollbar under a 40px pill row is noise, not affordance. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

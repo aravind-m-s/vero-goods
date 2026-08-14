@@ -28,7 +28,14 @@ const RESEND_SECONDS = 30;
  * code is verified — an unauthenticated caller cannot use this screen to find
  * out who shops here.
  */
-export function AuthView({ next = '/account' }: { next?: string }) {
+export function AuthView({
+  next = '/account',
+  /** Embedded in a page that already has its own heading, e.g. checkout. */
+  compact = false,
+}: {
+  next?: string;
+  compact?: boolean;
+}) {
   const { success, error } = useToast();
 
   const [mode, setMode] = useState<Mode>('login');
@@ -132,12 +139,22 @@ export function AuthView({ next = '/account' }: { next?: string }) {
   const sentTo = channel === 'phone' ? `+${identifier.replace(/\D/g, '').slice(-10)}` : identifier;
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 py-12">
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-black tracking-tight text-ink">
+    <div
+      className={cn(
+        'mx-auto w-full max-w-md',
+        compact ? 'px-0 py-0' : 'px-4 py-8 sm:py-12'
+      )}
+    >
+      <div className={cn('text-center', compact ? 'mb-3' : 'mb-5 sm:mb-6')}>
+        <h1
+          className={cn(
+            'font-black tracking-tight text-ink',
+            compact ? 'text-lg' : 'text-xl sm:text-2xl'
+          )}
+        >
           {step === 'code' ? 'Enter your code' : isSignup ? 'Create your account' : 'Sign in'}
         </h1>
-        <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-ink-subtle">
+        <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-ink-subtle">
           {step === 'code'
             ? `We sent a 6-digit code to ${sentTo}. It expires in 10 minutes.`
             : 'No passwords. We send a one-time code to your email or mobile number.'}
@@ -145,7 +162,7 @@ export function AuthView({ next = '/account' }: { next?: string }) {
       </div>
 
       <Card>
-        <CardContent className="space-y-5 p-6">
+        <CardContent className="space-y-4 p-5 sm:space-y-5 sm:p-6">
           {step === 'identify' ? (
             <>
               <div
