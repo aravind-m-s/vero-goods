@@ -50,8 +50,8 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
   const discount =
     selected.compareAtPriceMinor && selected.compareAtPriceMinor > selected.priceMinor
       ? Math.round(
-          ((selected.compareAtPriceMinor - selected.priceMinor) / selected.compareAtPriceMinor) * 100
-        )
+        ((selected.compareAtPriceMinor - selected.priceMinor) / selected.compareAtPriceMinor) * 100
+      )
       : 0;
   const savedMinor = selected.compareAtPriceMinor
     ? selected.compareAtPriceMinor - selected.priceMinor
@@ -254,10 +254,10 @@ export function ProductActions({ productTitle, images, variants }: ProductAction
           <Row
             label={
               <span className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5" /> Returns
+                <ShieldCheck className="h-3.5 w-3.5" /> Replacement
               </span>
             }
-            value="7 days, unopened"
+            value="24 hours, Pack opening video required"
           />
         </dl>
       </div>

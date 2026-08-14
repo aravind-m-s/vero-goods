@@ -545,7 +545,7 @@ export function CheckoutView() {
                   checked={paymentMethod === 'COD'}
                   icon={<Banknote className="h-4 w-4" />}
                   title="Cash on delivery"
-                  subtitle={`${formatMinor(totals.codFeeMinor || 4900)} handling fee applies`}
+                  subtitle={`${formatMinor(totals.codFeeMinor || 18)} handling fee applies`}
                 />
                 {errors.paymentMethod && <AuthError message={errors.paymentMethod.message ?? ''} />}
               </CardContent>
