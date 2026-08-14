@@ -13,4 +13,4 @@ export function trackingUrl(token: string): string {
 }
 
 export const STORE_NAME = 'Vero Goods';
-export const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL ?? 'support@verogoods.in';
+export const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL ?? 'info@verogoods.in';

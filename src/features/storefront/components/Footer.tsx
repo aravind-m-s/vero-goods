@@ -61,7 +61,7 @@ export function Footer() {
             />
             <FooterColumn
               title="Help"
-              links={[{ href: 'mailto:support@verogoods.in', label: 'Contact support' }]}
+              links={[{ href: 'mailto:info@verogoods.in', label: 'Contact support' }]}
             />
             <FooterColumn
               title="Policies"
