@@ -16,11 +16,12 @@ const LINKS = [
 /**
  * Account navigation.
  *
- * Two layouts, one source of links. On phones it is a horizontally scrollable
- * rail of labelled pills — icon *and* word, because an icon-only tab bar makes
- * people guess what "Addresses" versus "Orders" means. On large screens the
- * same links become the sidebar. Sign out is not in the rail: a destructive
- * action does not belong one mis-swipe away from a navigation tap.
+ * Two layouts, one source of links. On phones all four links share one
+ * full-width row — no horizontal scrolling, because a scroll rail hides
+ * destinations behind a gesture nobody knows is there. Labels stay next to the
+ * icons: an icon-only bar makes people guess what "Addresses" versus "Orders"
+ * means. On large screens the same links become the sidebar. Sign out is not in
+ * the bar: a destructive action does not belong beside a navigation tap.
  */
 export function AccountNav() {
   const pathname = usePathname();
@@ -39,28 +40,30 @@ export function AccountNav() {
 
   return (
     <>
-      {/* Mobile: edge-to-edge scroll rail, sticky under the site header. */}
+      {/* Mobile: one full-width row, every destination visible at once. */}
       <nav
         aria-label="Account"
         className="sticky top-16 z-20 -mx-4 border-b border-line bg-surface-sunken/95 px-4 py-2 backdrop-blur-sm lg:hidden"
       >
-        <ul className="scrollbar-none flex snap-x gap-2 overflow-x-auto pb-0.5">
+        {/* grid-cols-4 with min-w-0 cells: the row divides the screen instead of
+            overflowing it, so nothing sits off-screen on a 320px phone. */}
+        <ul className="grid grid-cols-4 gap-1.5">
           {LINKS.map((link) => {
             const active = isCurrent(link);
             return (
-              <li key={link.href} className="snap-start">
+              <li key={link.href} className="min-w-0">
                 <Link
                   href={link.href}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
-                    'flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors',
+                    'flex h-full flex-col items-center justify-center gap-1 rounded-control border px-1 py-1.5 text-3xs font-semibold transition-colors',
                     active
                       ? 'border-ink bg-surface-inverse text-ink-inverse'
                       : 'border-line bg-surface-raised text-ink-muted'
                   )}
                 >
-                  <link.icon className="h-3.5 w-3.5 shrink-0" />
-                  {link.label}
+                  <link.icon className="h-4 w-4 shrink-0" />
+                  <span className="w-full truncate text-center">{link.label}</span>
                 </Link>
               </li>
             );

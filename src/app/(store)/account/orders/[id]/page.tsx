@@ -147,7 +147,11 @@ export default async function AccountOrderDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-1 text-xs text-ink-muted">
-              <p className="font-bold text-ink">{order.customerName}</p>
+              {/* Read straight off the order's own snapshot — never the
+                  customer's current address book. */}
+              <p className="font-bold text-ink">
+                {order.shippingAddress.fullName ?? order.customerName}
+              </p>
               <address className="not-italic leading-relaxed">
                 {order.shippingAddress.line1}
                 {order.shippingAddress.line2 && <>, {order.shippingAddress.line2}</>}
@@ -157,7 +161,7 @@ export default async function AccountOrderDetailPage({
                 <br />
                 {order.shippingAddress.country}
               </address>
-              <p>{order.phone}</p>
+              <p>{order.shippingAddress.phone ?? order.phone}</p>
               {order.estimatedDeliveryDate && (
                 <p className="pt-1 text-ink-subtle">
                   Estimated delivery{' '}

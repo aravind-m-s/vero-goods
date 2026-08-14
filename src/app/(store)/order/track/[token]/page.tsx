@@ -129,6 +129,9 @@ export default async function OrderTrackingPage(props: PageProps<'/order/track/[
               <div>
                 <p className="font-bold text-ink">Shipping address</p>
                 <p className="mt-1 text-ink-muted">
+                  {/* The address frozen onto the order, not the current one. */}
+                  {order.shippingAddress.fullName ?? order.customerName}
+                  <br />
                   {order.shippingAddress.line1}
                   {order.shippingAddress.line2 && `, ${order.shippingAddress.line2}`}
                   <br />

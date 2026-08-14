@@ -369,6 +369,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <p className="text-ink-muted">{order.phone}</p>
               <Separator className="bg-line" />
               <p className="text-ink-muted">
+                {/* Snapshot from the moment the order was placed. */}
+                {order.shippingAddress.fullName ?? order.customerName}
+                <br />
                 {order.shippingAddress.line1}
                 {order.shippingAddress.line2 && `, ${order.shippingAddress.line2}`}
                 <br />
