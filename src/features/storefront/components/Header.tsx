@@ -92,27 +92,35 @@ export function Header() {
           </nav>
 
           <div className="ml-auto flex items-center gap-1">
-            <ThemeToggle />
+            {/* The theme picker is a mobile-menu row on small screens; three
+                icon buttons plus a name label did not fit next to the cart. */}
+            <span className="hidden md:inline-flex">
+              <ThemeToggle />
+            </span>
 
             {customer ? (
+              // Name and sign-out are desktop affordances. On mobile the same
+              // two live in the menu, where they have room to be words.
               <div className="flex items-center gap-1">
                 <Link
                   href="/account"
-                  className="flex max-w-40 items-center gap-1.5 truncate rounded-control px-2 py-1.5 text-xs text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+                  aria-label="My account"
+                  className="flex max-w-44 items-center gap-1.5 rounded-control p-2 text-xs text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:px-2.5"
                 >
-                  <User className="h-3.5 w-3.5 shrink-0" />
-                  <span className="hidden truncate lg:inline">{customer.name}</span>
-                  <span className="lg:hidden">Account</span>
+                  <User className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
+                  <span className="hidden truncate md:inline">{customer.name}</span>
                 </Link>
-                <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Sign out">
-                  <LogOut className="h-4 w-4" />
-                </Button>
+                <span className="hidden md:inline-flex">
+                  <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Sign out">
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                </span>
               </div>
             ) : (
-              <Link href="/login">
-                <Button variant="ghost" size="sm" className="gap-1.5">
-                  <User className="h-4 w-4" />
-                  <span className="hidden sm:inline">Sign in</span>
+              <Link href="/login" aria-label="Sign in">
+                <Button variant="ghost" size="sm" className="gap-1.5 px-2 md:px-3">
+                  <User className="h-5 w-5 md:h-4 md:w-4" />
+                  <span className="hidden md:inline">Sign in</span>
                 </Button>
               </Link>
             )}
@@ -138,21 +146,38 @@ export function Header() {
           aria-label="Mobile"
           className={cn(
             'overflow-hidden border-t border-line transition-[max-height] duration-200 md:hidden',
-            isMenuOpen ? 'max-h-80' : 'max-h-0 border-t-0'
+            isMenuOpen ? 'max-h-96' : 'max-h-0 border-t-0'
           )}
         >
           <div className="flex flex-col p-2">
-            {[...NAV, { href: customer ? '/account' : '/login', label: customer ? 'My account' : 'Sign in' }].map(
-              (item) => (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  onClick={() => setIsMenuOpen(false)}
-                  className="rounded-control px-3 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
-                >
-                  {item.label}
-                </Link>
-              )
+            {customer && (
+              <p className="truncate px-3 pb-2 pt-1 text-2xs font-bold uppercase tracking-wider text-ink-subtle">
+                Signed in as {customer.name}
+              </p>
+            )}
+
+            {[
+              ...NAV,
+              { href: customer ? '/account' : '/login', label: customer ? 'My account' : 'Sign in' },
+            ].map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                onClick={() => setIsMenuOpen(false)}
+                className="rounded-control px-3 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+              >
+                {item.label}
+              </Link>
+            ))}
+
+            {customer && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="cursor-pointer rounded-control px-3 py-2.5 text-left text-sm font-medium text-danger transition-colors hover:bg-surface-sunken"
+              >
+                Sign out
+              </button>
             )}
 
             {/* Spelled out on mobile: the labelled control is clearer than an
