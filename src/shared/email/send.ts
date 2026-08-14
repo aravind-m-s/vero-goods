@@ -18,6 +18,10 @@ export interface EmailMessage {
 }
 
 export async function sendEmail(message: EmailMessage): Promise<{ sent: boolean; id?: string }> {
+  // Phone-first customers may have no email on file at all; that is not an
+  // error, there is simply nowhere to send.
+  if (!message.to?.trim()) return { sent: false };
+
   const user = process.env.SMTP_EMAIL_ADDRESS;
   const pass = process.env.SMTP_APP_PASSWORD;
   const port = Number(process.env.SMTP_PORT) || 465;

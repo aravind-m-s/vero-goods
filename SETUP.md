@@ -68,9 +68,56 @@ their money taken.
 
 ## Email
 
-Set `RESEND_API_KEY` and `EMAIL_FROM` to send OTP codes, order confirmations and
-status updates. Without a key, messages are printed to the server console and
-the app keeps working — useful locally, not acceptable in production.
+Set `SMTP_EMAIL_ADDRESS` and `SMTP_APP_PASSWORD` (Gmail app password) to send
+OTP codes, receipts and status updates. Without them, messages are printed to
+the server console and the app keeps working — useful locally, not acceptable in
+production.
+
+## Customer accounts
+
+Customers sign in with an email address **or** a mobile number, both verified by
+a 6-digit one-time code. There are no passwords anywhere in the customer flow.
+
+- **Email codes** ride on the SMTP settings above.
+- **SMS codes** need `SMS_PROVIDER=twilio` or `SMS_PROVIDER=msg91` plus that
+  provider's credentials. Leave it blank in development and the code is printed
+  to the terminal. In India, MSG91 also needs a registered DLT template.
+- **Google Sign-In** appears only when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` and
+  `GOOGLE_CLIENT_ID` are set to the same OAuth web client id. Add your origin to
+  the client's "Authorised JavaScript origins".
+
+Signed-in customers get `/account` — profile, address book with a default
+delivery address, and order history. Changing an email or mobile requires a code
+sent to the **new** value.
+
+### Duplicate identifiers on an existing database
+
+Email, phone and Google id must each resolve to one account. Older data can
+violate that (checkout used to copy an unverified phone number onto the user
+record). The app builds those indexes as unique when it can, logs a warning and
+falls back to non-unique when it cannot. To inspect and fix:
+
+```bash
+node --env-file=.env scripts/dedupe-user-identifiers.mjs --field=phone
+node --env-file=.env scripts/dedupe-user-identifiers.mjs --field=phone --fix
+```
+
+The fix keeps the identifier on the strongest claim (verified, then most orders,
+then oldest) and clears it from the others. No account or order is deleted.
+
+## Out-of-stock products
+
+An out-of-stock product stays fully browsable: media, description, variants and
+specifications all render, with an "Out of stock" banner at the top. The primary
+call to action becomes **Get it for me**, which records the customer's interest
+(name, mobile, optional email and note). Those land in **Admin → Sourcing
+requests**, and a copy is emailed to `SUPPORT_EMAIL`.
+
+## Product videos
+
+Products accept video URLs alongside images (Admin → product → Product media).
+YouTube and Vimeo links render as privacy-mode embeds; direct `.mp4`/`.webm`
+links play inline. Any other URL is ignored rather than framed.
 
 ## Commercial rules
 

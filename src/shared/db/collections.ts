@@ -2,9 +2,10 @@ import 'server-only';
 
 import type { Collection, Document } from 'mongodb';
 import { ensureIndexes, getMongoDb } from '@/shared/db/mongodb';
-import type { OtpRecord, User } from '@/features/auth/types';
-import type { Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant } from '@/features/catalog/types';
+import type { Address, OtpRecord, User } from '@/features/auth/types';
+import type { Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant, ProductVideo } from '@/features/catalog/types';
 import type { Order, OrderItem } from '@/features/orders/types';
+import type { ProductRequest } from '@/features/requests/types';
 import type { Counter } from '@/shared/db/types';
 
 /**
@@ -21,9 +22,13 @@ async function collection<T extends Document>(name: string): Promise<Collection<
 }
 
 export const usersCollection = () => collection<WithMongoId<User>>('users');
+export const addressesCollection = () => collection<WithMongoId<Address>>('addresses');
 export const productsCollection = () => collection<WithMongoId<Product>>('products');
 export const variantsCollection = () => collection<WithMongoId<ProductVariant>>('productVariants');
 export const productImagesCollection = () => collection<WithMongoId<ProductImage>>('productImages');
+export const productVideosCollection = () => collection<WithMongoId<ProductVideo>>('productVideos');
+export const productRequestsCollection = () =>
+  collection<WithMongoId<ProductRequest>>('productRequests');
 export const specificationsCollection = () =>
   collection<WithMongoId<ProductSpecification>>('productSpecifications');
 export const specificationRowsCollection = () =>

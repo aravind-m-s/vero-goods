@@ -10,14 +10,23 @@ import {
   verifyAdminPassword,
   verifyOtp,
 } from '@/features/auth/server/auth';
+import { normaliseIdentifier } from '@/features/auth/server/users.repo';
+import { isGoogleSignInEnabled } from '@/features/auth/server/google';
 import { sendEmail } from '@/shared/email/send';
 import { otpEmail } from '@/shared/email/templates';
+import { otpSms, sendSms } from '@/shared/sms/send';
 import { clientIp, rateLimit, resetRateLimit } from '@/shared/lib/rate-limit';
-import { AdminLoginSchema, OtpRequestSchema, OtpVerifySchema } from '@/features/auth/schemas';
+import {
+  AdminLoginSchema,
+  OtpRequestSchema,
+  OtpVerifySchema,
+  identifyChannel,
+} from '@/features/auth/schemas';
+import { publicUser } from '@/features/auth/server/public-user';
 
 export const dynamic = 'force-dynamic';
 
-/** Uniform delay-free failure response — never reveals whether an email exists. */
+/** Uniform failure response — never reveals whether an account exists. */
 const GENERIC_OTP_ERROR = 'Invalid or expired verification code';
 
 function tooMany(retryAfterSeconds: number) {
@@ -30,10 +39,9 @@ function tooMany(retryAfterSeconds: number) {
 // GET — current customer session
 export async function GET() {
   const customer = await getSessionCustomer();
-  if (!customer) return NextResponse.json({ user: null });
-
   return NextResponse.json({
-    user: { id: customer.id, email: customer.email, name: customer.name, phone: customer.phone },
+    user: customer ? publicUser(customer) : null,
+    googleSignInEnabled: isGoogleSignInEnabled(),
   });
 }
 
@@ -78,28 +86,42 @@ export async function POST(request: NextRequest) {
 
   const parsed = OtpRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Valid email address is required' }, { status: 400 });
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? 'Enter a valid email address or mobile number' },
+      { status: 400 }
+    );
   }
-  const email = parsed.data.email.toLowerCase();
 
-  // Two limiters: per-address stops mailbox flooding, per-IP stops an attacker
-  // cycling through addresses from one host.
-  const [byEmail, byIp] = await Promise.all([
-    rateLimit(`otp-send:${email}`, 5, 60 * 60),
+  const { name } = parsed.data;
+  // The schema has already proved it is one or the other.
+  const channel = identifyChannel(parsed.data.identifier) as 'email' | 'phone';
+  const identifier = normaliseIdentifier(parsed.data.identifier, channel);
+
+  // Two limiters: per-identifier stops mailbox/handset flooding, per-IP stops
+  // an attacker cycling through addresses from one host.
+  const [byIdentifier, byIp] = await Promise.all([
+    rateLimit(`otp-send:${identifier}`, 5, 60 * 60),
     rateLimit(`otp-send-ip:${ip}`, 20, 60 * 60),
   ]);
-  if (!byEmail.allowed) return tooMany(byEmail.retryAfterSeconds);
+  if (!byIdentifier.allowed) return tooMany(byIdentifier.retryAfterSeconds);
   if (!byIp.allowed) return tooMany(byIp.retryAfterSeconds);
 
-  const code = await createOtp(email);
-  const { sent } = await sendEmail(otpEmail(email, code, OTP_TTL_SECONDS / 60));
+  const code = await createOtp({ identifier, channel, purpose: 'login', name });
+
+  const { sent } =
+    channel === 'email'
+      ? await sendEmail(otpEmail(identifier, code, OTP_TTL_SECONDS / 60))
+      : await sendSms({ to: identifier, text: otpSms(code, OTP_TTL_SECONDS / 60) });
 
   return NextResponse.json({
     success: true,
-    delivery: sent ? 'email' : 'console',
+    channel,
+    delivery: sent ? channel : 'console',
     message: sent
-      ? 'Verification code sent to your email.'
-      : 'Email delivery is not configured — the code was printed to the server terminal.',
+      ? channel === 'email'
+        ? 'Verification code sent to your email.'
+        : 'Verification code sent by SMS.'
+      : `${channel === 'email' ? 'Email' : 'SMS'} delivery is not configured — the code was printed to the server terminal.`,
   });
 }
 
@@ -118,16 +140,19 @@ export async function PUT(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: GENERIC_OTP_ERROR }, { status: 400 });
   }
-  const email = parsed.data.email.toLowerCase();
 
-  const [byEmail, byIp] = await Promise.all([
-    rateLimit(`otp-verify:${email}`, 10, 15 * 60),
+  const { name } = parsed.data;
+  const channel = identifyChannel(parsed.data.identifier) as 'email' | 'phone';
+  const identifier = normaliseIdentifier(parsed.data.identifier, channel);
+
+  const [byIdentifier, byIp] = await Promise.all([
+    rateLimit(`otp-verify:${identifier}`, 10, 15 * 60),
     rateLimit(`otp-verify-ip:${ip}`, 50, 15 * 60),
   ]);
-  if (!byEmail.allowed) return tooMany(byEmail.retryAfterSeconds);
+  if (!byIdentifier.allowed) return tooMany(byIdentifier.retryAfterSeconds);
   if (!byIp.allowed) return tooMany(byIp.retryAfterSeconds);
 
-  const result = await verifyOtp(email, parsed.data.code);
+  const result = await verifyOtp({ identifier, channel, name }, parsed.data.code);
   if (!result.ok) {
     const status = result.reason === 'too_many_attempts' ? 429 : 401;
     return NextResponse.json(
@@ -141,16 +166,19 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  await Promise.all([resetRateLimit(`otp-verify:${email}`), setCustomerSession(result.user.id)]);
+  await Promise.all([
+    resetRateLimit(`otp-verify:${identifier}`),
+    setCustomerSession(result.user.id),
+  ]);
 
+  // Only disclosed *after* the code was proved, so it guides the person holding
+  // the identifier without telling an anonymous prober who has an account.
   return NextResponse.json({
     success: true,
-    user: {
-      id: result.user.id,
-      email: result.user.email,
-      name: result.user.name,
-      phone: result.user.phone,
-    },
+    user: publicUser(result.user),
+    isNewAccount: result.isNewAccount,
+    /** True when the account exists but still carries a generated name. */
+    needsName: !result.user.name || result.user.name.startsWith('Customer '),
   });
 }
 

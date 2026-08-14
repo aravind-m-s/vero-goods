@@ -38,9 +38,12 @@ export interface VariantDraft {
 interface VariantBuilderProps {
   value: VariantDraft[];
   onChange: (value: VariantDraft[]) => void;
+  /** Validation messages keyed by dotted path, e.g. `variants.0.supplier.sku`. */
+  errors?: Record<string, string>;
 }
 
-export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
+export function VariantBuilder({ value, onChange, errors = {} }: VariantBuilderProps) {
+  const errorAt = (index: number, field: string) => errors[`variants.${index}.${field}`];
   const update = (index: number, patch: Partial<VariantDraft>) => {
     onChange(value.map((variant, i) => (i === index ? { ...variant, ...patch } : variant)));
   };
@@ -83,11 +86,16 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
           const cost = Number(variant.supplier.costPrice) || 0;
           const marginPercent = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
           const negativeMargin = price > 0 && cost > 0 && cost >= price;
+          const hasError = Object.keys(errors).some((path) =>
+            path.startsWith(`variants.${index}.`)
+          );
 
           return (
             <div
               key={variant.id ?? index}
-              className="space-y-4 rounded-card border border-line p-4 dark:border-line"
+              className={`space-y-4 rounded-card border p-4 ${
+                hasError ? 'border-danger' : 'border-line dark:border-line'
+              }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-ink-subtle">
@@ -111,6 +119,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                     value={variant.name}
                     onChange={(event) => update(index, { name: event.target.value })}
                     placeholder="Coal Black"
+                    error={errorAt(index, 'name')}
                   />
                 </FieldBlock>
                 <FieldBlock label="SKU">
@@ -119,6 +128,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                     onChange={(event) => update(index, { sku: event.target.value })}
                     placeholder="VERO-PLA-BLK-1KG"
                     className="font-mono text-xs"
+                    error={errorAt(index, 'sku')}
                   />
                 </FieldBlock>
                 <FieldBlock label="Selling price (₹)">
@@ -127,6 +137,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                     min={1}
                     value={variant.price}
                     onChange={(event) => update(index, { price: event.target.value })}
+                    error={errorAt(index, 'price')}
                   />
                 </FieldBlock>
                 <FieldBlock label="Compare-at price (₹, optional)">
@@ -135,6 +146,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                     min={0}
                     value={variant.compareAtPrice ?? ''}
                     onChange={(event) => update(index, { compareAtPrice: event.target.value })}
+                    error={errorAt(index, 'compareAtPrice')}
                   />
                 </FieldBlock>
                 <FieldBlock label="Stock on hand">
@@ -143,6 +155,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                     min={0}
                     value={variant.stockQty}
                     onChange={(event) => update(index, { stockQty: event.target.value })}
+                    error={errorAt(index, 'stockQty')}
                   />
                 </FieldBlock>
                 <FieldBlock label="Shipping weight (grams)">
@@ -151,6 +164,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                     min={0}
                     value={variant.weightGrams}
                     onChange={(event) => update(index, { weightGrams: event.target.value })}
+                    error={errorAt(index, 'weightGrams')}
                   />
                 </FieldBlock>
               </div>
@@ -180,6 +194,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                       value={variant.supplier.name}
                       onChange={(event) => updateSupplier(index, { name: event.target.value })}
                       placeholder="Vero Direct Warehouse"
+                      error={errorAt(index, 'supplier.name')}
                     />
                   </FieldBlock>
                   <FieldBlock label="Supplier SKU">
@@ -187,6 +202,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                       value={variant.supplier.sku}
                       onChange={(event) => updateSupplier(index, { sku: event.target.value })}
                       className="font-mono text-xs"
+                      error={errorAt(index, 'supplier.sku')}
                     />
                   </FieldBlock>
                   <FieldBlock label="Cost price (₹)">
@@ -195,6 +211,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                       min={0}
                       value={variant.supplier.costPrice}
                       onChange={(event) => updateSupplier(index, { costPrice: event.target.value })}
+                      error={errorAt(index, 'supplier.costPrice')}
                     />
                   </FieldBlock>
                   <FieldBlock label="Lead time (days)">
@@ -205,6 +222,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                       onChange={(event) =>
                         updateSupplier(index, { leadTimeDays: event.target.value })
                       }
+                      error={errorAt(index, 'supplier.leadTimeDays')}
                     />
                   </FieldBlock>
                   <div className="sm:col-span-2">
@@ -214,6 +232,7 @@ export function VariantBuilder({ value, onChange }: VariantBuilderProps) {
                         onChange={(event) => updateSupplier(index, { url: event.target.value })}
                         placeholder="https://supplier.example.com/product"
                         className="font-mono text-xs"
+                        error={errorAt(index, 'supplier.url')}
                       />
                     </FieldBlock>
                   </div>

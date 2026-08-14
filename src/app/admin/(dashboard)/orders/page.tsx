@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Eye, FileDown, Search, X } from 'lucide-react';
+import { CheckCircle2, Eye, FileDown, Search, X } from 'lucide-react';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -42,7 +42,7 @@ function paymentVariant(status: PaymentStatus): 'success' | 'warning' | 'danger'
 }
 
 export default function AdminOrdersPage() {
-  const { error } = useToast();
+  const { success, error } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,6 +52,7 @@ export default function AdminOrdersPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const buildQuery = useCallback(
     (targetPage: number) => {
@@ -105,6 +106,37 @@ export default function AdminOrdersPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
   }, [statusFilter, search, dateFrom, dateTo]);
+
+  /**
+   * Orders land in PLACED and stay there until a human accepts them — payment
+   * settling no longer confirms anything — so confirming is the one action
+   * worth having without opening the order.
+   */
+  const handleConfirm = async (order: Order) => {
+    setConfirmingId(order.id);
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: OrderStatus.CONFIRMED }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        error(payload.error ?? 'Could not confirm the order');
+        return;
+      }
+      setOrders((prev) =>
+        prev.map((item) =>
+          item.id === order.id ? { ...item, orderStatus: OrderStatus.CONFIRMED } : item
+        )
+      );
+      success(`Order #${order.orderNumber} confirmed — customer emailed`);
+    } catch {
+      error('Network error');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   const clearFilters = () => {
     setSearch('');
@@ -163,6 +195,23 @@ export default function AdminOrdersPage() {
         <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant={statusFilter === OrderStatus.PLACED ? 'default' : 'outline'}
+          size="sm"
+          onClick={() =>
+            setStatusFilter((current) =>
+              current === OrderStatus.PLACED ? 'ALL' : OrderStatus.PLACED
+            )
+          }
+        >
+          Awaiting confirmation
+        </Button>
+        <span className="text-2xs text-ink-subtle">
+          New orders stay in PLACED until you confirm them.
+        </span>
+      </div>
+
       {(search || statusFilter !== 'ALL' || dateFrom || dateTo) && (
         <button
           type="button"
@@ -183,7 +232,7 @@ export default function AdminOrdersPage() {
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Payment</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">View</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -225,12 +274,32 @@ export default function AdminOrdersPage() {
                       {order.orderStatus.replace(/_/g, ' ')}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/admin/orders/${order.id}`}>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 p-0" aria-label="View order">
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-1">
+                      {order.orderStatus === OrderStatus.PLACED &&
+                        (order.paymentMethod === 'COD' ||
+                          order.paymentStatus === PaymentStatus.PAID) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          onClick={() => handleConfirm(order)}
+                          isLoading={confirmingId === order.id}
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Confirm
+                        </Button>
+                      )}
+                      <Link href={`/admin/orders/${order.id}`}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 p-0"
+                          aria-label="View order"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      </Link>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

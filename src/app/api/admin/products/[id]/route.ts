@@ -1,9 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { isAdminAuthenticated } from '@/features/auth/server/auth';
 import { toProductWriteInput } from '@/features/admin/server/product-input';
-import { archiveProduct, getProductById, skuExists, slugExists, updateProduct } from '@/features/catalog/server/products.repo';
+import {
+  archiveProduct,
+  deleteProduct,
+  getProductById,
+  skuExists,
+  slugExists,
+  updateProduct,
+} from '@/features/catalog/server/products.repo';
 import { minorToRupees } from '@/shared/lib/money';
-import { ProductFormSchema } from '@/features/catalog/schemas';
+import { ProductFormSchema, issuesToFieldErrors } from '@/features/catalog/schemas';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +36,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<'/api/admin/p
     product: {
       ...detail.product,
       imageUrls: detail.images.map((image) => image.url),
+      videoUrls: detail.videos.map((video) => video.url),
       variants: detail.variants.map((variant) => ({
         id: variant.id,
         name: variant.name,
@@ -68,7 +76,7 @@ export async function PUT(request: NextRequest, ctx: RouteContext<'/api/admin/pr
     const parsed = ProductFormSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Validation failed', details: parsed.error.flatten() },
+        { error: 'Validation failed', fieldErrors: issuesToFieldErrors(parsed.error) },
         { status: 400 }
       );
     }
@@ -102,11 +110,32 @@ export async function PUT(request: NextRequest, ctx: RouteContext<'/api/admin/pr
   }
 }
 
-export async function DELETE(_request: NextRequest, ctx: RouteContext<'/api/admin/products/[id]'>) {
+/** `?mode=delete` hard-deletes; anything else archives. Mirrors the collection route. */
+export async function DELETE(request: NextRequest, ctx: RouteContext<'/api/admin/products/[id]'>) {
   const denied = await requireAdmin();
   if (denied) return denied;
 
   const { id } = await ctx.params;
+
+  if (new URL(request.url).searchParams.get('mode') === 'delete') {
+    const result = await deleteProduct(id);
+    if (result.status === 'not-found') {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+    if (result.status === 'referenced') {
+      return NextResponse.json(
+        {
+          error: `${result.product.title} appears on ${result.orderItemCount} order item${
+            result.orderItemCount === 1 ? '' : 's'
+          } and cannot be deleted. Archive it instead.`,
+          orderItemCount: result.orderItemCount,
+        },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ success: true, message: `${result.product.title} deleted` });
+  }
+
   const product = await archiveProduct(id);
   if (!product) {
     return NextResponse.json({ error: 'Product not found' }, { status: 404 });

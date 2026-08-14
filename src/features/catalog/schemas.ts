@@ -59,6 +59,8 @@ export const ProductFormSchema = z
       .array(z.url('Must be a valid URL'))
       .min(1, 'At least one product image URL is required')
       .max(10),
+    /** Direct mp4/webm files or YouTube/Vimeo links. Optional. */
+    videoUrls: z.array(z.url('Must be a valid URL')).max(6).default([]),
     variants: z.array(VariantSchema).min(1, 'At least one variant is required').max(50),
     specifications: z.array(SpecificationSchema).max(20).default([]),
   })
@@ -68,3 +70,21 @@ export const ProductFormSchema = z
   );
 
 export type ProductFormValues = z.input<typeof ProductFormSchema>;
+
+/** Key used for issues that belong to the form as a whole, not to one field. */
+export const FORM_ERROR_KEY = '_form';
+
+/**
+ * Flattens a ZodError into `dotted.path -> message`, e.g.
+ * `variants.0.supplier.costPrice`. Zod's own `.flatten()` keeps only
+ * depth-1 paths, which silently drops every variant, supplier, specification
+ * and image error — the admin form then reported "invalid" with nothing marked.
+ */
+export function issuesToFieldErrors(error: z.ZodError): Record<string, string> {
+  const messages: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const key = issue.path.length > 0 ? issue.path.map(String).join('.') : FORM_ERROR_KEY;
+    if (!messages[key]) messages[key] = issue.message;
+  }
+  return messages;
+}
