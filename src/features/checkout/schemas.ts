@@ -4,21 +4,41 @@ import { z } from 'zod';
 
 export const AddressSchema = z.object({
   line1: z.string().min(5, 'Address Line 1 must be at least 5 characters').max(200),
-  line2: z.string().max(200).optional(),
+  /**
+   * Nullable, not merely optional: an address saved without a second line is
+   * stored as `null` by the driver, so that is what comes back and gets sent
+   * here. Normalised to `undefined` so the order never carries a null.
+   */
+  line2: z
+    .string()
+    .max(200)
+    .nullish()
+    .transform((value) => value ?? undefined),
   city: z.string().min(2, 'City is required').max(80),
   state: z.string().min(2, 'State is required').max(80),
   pinCode: z.string().regex(/^\d{6}$/, 'Invalid Indian PIN code (must be 6 digits)'),
   country: z.literal('India', { message: 'Shipping is restricted to India only' }),
 });
 
-/** The shape the checkout form binds to. */
-export const CheckoutFormSchema = AddressSchema.extend({
+/**
+ * What the checkout form itself still collects. The delivery address is no
+ * longer typed here — it is picked from the saved address list (or saved to it
+ * first), so the form is down to the receipt email and the payment method.
+ */
+export const CheckoutFormSchema = z.object({
   email: z.email('Invalid email address'),
-  name: z.string().min(2, 'Name must be at least 2 characters').max(120),
-  phone: z
-    .string()
-    .regex(/^[6-9]\d{9}$/, 'Invalid Indian mobile number (must be 10 digits starting with 6-9)'),
   paymentMethod: z.enum(['COD', 'RAZORPAY']),
+});
+
+/**
+ * The address as it is frozen onto the order. Recipient name and phone travel
+ * with it so the snapshot is self-contained.
+ */
+export const OrderAddressSchema = AddressSchema.extend({
+  fullName: z.string().min(2).max(120).optional(),
+  phone: z.string().max(20).optional(),
+  label: z.string().max(40).optional(),
+  sourceAddressId: z.string().max(80).optional(),
 });
 
 export const CartItemSchema = z.object({
@@ -34,7 +54,13 @@ export const CartItemSchema = z.object({
 export const CreateOrderSchema = z.object({
   name: z.string().min(2).max(120),
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian mobile number'),
-  shippingAddress: AddressSchema,
+  /**
+   * Where the receipt goes. Optional because a customer who signed in with a
+   * mobile number may have no email on file; the session address is used when
+   * this is absent. Never written back to the account — it is unverified.
+   */
+  email: z.email('Invalid email address').optional(),
+  shippingAddress: OrderAddressSchema,
   paymentMethod: z.enum(['COD', 'RAZORPAY']),
   items: z.array(CartItemSchema).min(1, 'Cart is empty').max(50),
   /** Makes a retried checkout return the original order instead of creating a second one. */

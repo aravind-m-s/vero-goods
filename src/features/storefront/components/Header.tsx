@@ -11,21 +11,21 @@ import { cn } from '@/shared/lib/utils';
 
 const NAV = [
   { href: '/', label: 'Shop all' },
-  { href: '#', label: 'Orders', isNoOp: true },
+  { href: '/account/orders', label: 'Orders' },
 ];
 
 export function Header() {
   const { cartCount, isHydrated } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [customer, setCustomer] = useState<{ name: string; email: string } | null>(null);
+  const [customer, setCustomer] = useState<{ name: string } | null>(null);
 
   const fetchSession = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/otp');
       if (!response.ok) return;
       const data = await response.json();
-      setCustomer(data.user ? { name: data.user.name, email: data.user.email } : null);
+      setCustomer(data.user ? { name: data.user.name } : null);
     } catch {
       // Treat an unreachable session endpoint as signed out.
     }
@@ -84,11 +84,6 @@ export function Header() {
               <Link
                 key={item.label}
                 href={item.href}
-                onClick={(e) => {
-                  if (item.isNoOp) {
-                    e.preventDefault();
-                  }
-                }}
                 className="rounded-control px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
               >
                 {item.label}
@@ -97,19 +92,38 @@ export function Header() {
           </nav>
 
           <div className="ml-auto flex items-center gap-1">
-            <ThemeToggle />
+            {/* The theme picker is a mobile-menu row on small screens; three
+                icon buttons plus a name label did not fit next to the cart. */}
+            <span className="hidden md:inline-flex">
+              <ThemeToggle />
+            </span>
 
             {customer ? (
+              // Name and sign-out are desktop affordances. On mobile the same
+              // two live in the menu, where they have room to be words.
               <div className="flex items-center gap-1">
-                <span className="hidden max-w-[140px] items-center gap-1.5 truncate px-2 text-xs text-ink-muted lg:flex">
-                  <User className="h-3.5 w-3.5 shrink-0" />
-                  {customer.name}
+                <Link
+                  href="/account"
+                  aria-label="My account"
+                  className="flex max-w-44 items-center gap-1.5 rounded-control p-2 text-xs text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:px-2.5"
+                >
+                  <User className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
+                  <span className="hidden truncate md:inline">{customer.name}</span>
+                </Link>
+                <span className="hidden md:inline-flex">
+                  <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Sign out">
+                    <LogOut className="h-4 w-4" />
+                  </Button>
                 </span>
-                <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Sign out">
-                  <LogOut className="h-4 w-4" />
-                </Button>
               </div>
-            ) : null}
+            ) : (
+              <Link href="/login" aria-label="Sign in">
+                <Button variant="ghost" size="sm" className="gap-1.5 px-2 md:px-3">
+                  <User className="h-5 w-5 md:h-4 md:w-4" />
+                  <span className="hidden md:inline">Sign in</span>
+                </Button>
+              </Link>
+            )}
 
             <button
               type="button"
@@ -132,26 +146,39 @@ export function Header() {
           aria-label="Mobile"
           className={cn(
             'overflow-hidden border-t border-line transition-[max-height] duration-200 md:hidden',
-            isMenuOpen ? 'max-h-80' : 'max-h-0 border-t-0'
+            isMenuOpen ? 'max-h-96' : 'max-h-0 border-t-0'
           )}
         >
           <div className="flex flex-col p-2">
-            {NAV.map((item) => (
+            {customer && (
+              <p className="truncate px-3 pb-2 pt-1 text-2xs font-bold uppercase tracking-wider text-ink-subtle">
+                Signed in as {customer.name}
+              </p>
+            )}
+
+            {[
+              ...NAV,
+              { href: customer ? '/account' : '/login', label: customer ? 'My account' : 'Sign in' },
+            ].map((item) => (
               <Link
                 key={item.label}
                 href={item.href}
-                onClick={(e) => {
-                  if (item.isNoOp) {
-                    e.preventDefault();
-                  } else {
-                    setIsMenuOpen(false);
-                  }
-                }}
+                onClick={() => setIsMenuOpen(false)}
                 className="rounded-control px-3 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
               >
                 {item.label}
               </Link>
             ))}
+
+            {customer && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="cursor-pointer rounded-control px-3 py-2.5 text-left text-sm font-medium text-danger transition-colors hover:bg-surface-sunken"
+              >
+                Sign out
+              </button>
+            )}
 
             {/* Spelled out on mobile: the labelled control is clearer than an
                 icon when there is room for it. */}

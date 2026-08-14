@@ -64,6 +64,21 @@ export interface ProductImage {
   sortOrder: number;
 }
 
+/**
+ * Product video. `url` is either a direct file (mp4/webm) or a YouTube/Vimeo
+ * watch/share link — the player picks its rendering from the URL, so the admin
+ * pastes whatever the supplier gave them.
+ */
+export interface ProductVideo {
+  id: string;
+  productId: string;
+  url: string;
+  title?: string;
+  /** Poster frame for direct-file videos. Optional; embeds bring their own. */
+  thumbnailUrl?: string;
+  sortOrder: number;
+}
+
 export interface ProductSpecification {
   id: string;
   productId: string;

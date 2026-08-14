@@ -15,6 +15,7 @@ export function toProductWriteInput(
     gstRatePercent: data.gstRatePercent,
     hsnCode: data.hsnCode || undefined,
     imageUrls: data.imageUrls,
+    videoUrls: data.videoUrls,
     variants: data.variants.map((variant) => ({
       id: variant.id,
       name: variant.name,

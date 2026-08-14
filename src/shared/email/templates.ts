@@ -1,8 +1,9 @@
 import 'server-only';
 
-import { STORE_NAME, SUPPORT_EMAIL, trackingUrl } from '@/shared/lib/config';
+import { STORE_NAME, SUPPORT_EMAIL, appUrl, trackingUrl } from '@/shared/lib/config';
 import { formatMinor } from '@/shared/lib/money';
 import { OrderStatus, type Order, type OrderItem } from '@/features/orders/types';
+import type { ProductRequest } from '@/features/requests/types';
 import type { EmailMessage } from '@/shared/email/send';
 
 /** Escapes interpolated values — order data is customer-supplied text. */
@@ -70,7 +71,12 @@ function totalsRows(order: Order): string {
   ].join('');
 }
 
-export function orderConfirmationEmail(order: Order, items: OrderItem[]): EmailMessage {
+/**
+ * Receipt sent as soon as an order is placed (and again on payment capture).
+ * It deliberately does not say "confirmed": confirmation is a separate step an
+ * admin performs, and its own email goes out on that transition.
+ */
+export function orderReceivedEmail(order: Order, items: OrderItem[]): EmailMessage {
   const url = trackingUrl(order.trackingToken);
   const paymentLine =
     order.paymentMethod === 'COD'
@@ -79,11 +85,11 @@ export function orderConfirmationEmail(order: Order, items: OrderItem[]): EmailM
 
   return {
     to: order.email,
-    subject: `Order ${order.orderNumber} confirmed`,
-    text: `Thanks ${order.customerName}! Order ${order.orderNumber} is confirmed. ${paymentLine} Track it here: ${url}`,
+    subject: `We have received order ${order.orderNumber}`,
+    text: `Thanks ${order.customerName}! We have received order ${order.orderNumber}. ${paymentLine} Our team will confirm it shortly and you will get an update. Track it here: ${url}`,
     html: layout(
-      `Order ${order.orderNumber} confirmed`,
-      `<p style="font-size:14px;color:#52525b;margin:0 0 8px">Thanks ${esc(order.customerName)} — we are getting your order ready.</p>
+      `Order ${order.orderNumber} received`,
+      `<p style="font-size:14px;color:#52525b;margin:0 0 8px">Thanks ${esc(order.customerName)} — we have your order and our team is reviewing it. You will get another email the moment it is confirmed.</p>
        <p style="font-size:14px;color:#52525b;margin:0 0 20px">${esc(paymentLine)}</p>
        <table style="width:100%;border-collapse:collapse;border-top:1px solid #e4e4e7;margin-bottom:8px">${itemRows(items)}</table>
        <table style="width:100%;border-collapse:collapse;border-top:1px solid #e4e4e7;padding-top:8px">${totalsRows(order)}</table>
@@ -150,6 +156,52 @@ export function statusUpdateEmail(order: Order): EmailMessage | null {
        ${tracking}
        <p style="margin:8px 0 0">
          <a href="${esc(url)}" style="background:#18181b;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 18px;border-radius:6px;display:inline-block">View order status</a>
+       </p>`
+    ),
+  };
+}
+
+/**
+ * "Get it for me" acknowledgement. Deliberately promises a reply, not stock —
+ * the seller has not committed to sourcing anything at this point.
+ */
+export function productRequestCustomerEmail(request: ProductRequest): EmailMessage {
+  const url = `${appUrl()}/products/${request.productSlug}`;
+  const variant =
+    request.variantName && request.variantName !== 'Default' ? ` (${request.variantName})` : '';
+
+  return {
+    to: request.email ?? '',
+    subject: `We got your request for ${request.productTitle}`,
+    text: `Thanks ${request.customerName} — we have your request for ${request.quantity} × ${request.productTitle}${variant}. Our team will check with our suppliers and get back to you on ${request.phone}. Product page: ${url}`,
+    html: layout(
+      'Request received',
+      `<p style="font-size:14px;color:#52525b;margin:0 0 12px">Thanks ${esc(request.customerName)} — this product is out of stock right now, and we have logged your interest.</p>
+       <p style="font-size:14px;color:#52525b;margin:0 0 20px"><strong>${esc(request.quantity)} × ${esc(request.productTitle)}${esc(variant)}</strong></p>
+       <p style="font-size:13px;color:#71717a;margin:0 0 20px">Our team checks with suppliers and replies on ${esc(request.phone)}, usually within two working days. Reference ${esc(request.id)}.</p>
+       <p style="margin:8px 0 0">
+         <a href="${esc(url)}" style="background:#18181b;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 18px;border-radius:6px;display:inline-block">View the product</a>
+       </p>`
+    ),
+  };
+}
+
+/** Internal alert so a demand signal is not sitting unseen in the admin panel. */
+export function productRequestAdminEmail(request: ProductRequest): EmailMessage {
+  const variant =
+    request.variantName && request.variantName !== 'Default' ? ` (${request.variantName})` : '';
+
+  return {
+    to: SUPPORT_EMAIL,
+    subject: `Sourcing request: ${request.quantity} × ${request.productTitle}`,
+    text: `${request.customerName} (${request.phone}${request.email ? `, ${request.email}` : ''}) wants ${request.quantity} × ${request.productTitle}${variant}${request.sku ? ` [${request.sku}]` : ''}. Note: ${request.note ?? '—'}`,
+    html: layout(
+      'New sourcing request',
+      `<p style="font-size:14px;color:#52525b;margin:0 0 12px"><strong>${esc(request.quantity)} × ${esc(request.productTitle)}${esc(variant)}</strong>${request.sku ? ` <span style="color:#a1a1aa">${esc(request.sku)}</span>` : ''}</p>
+       <p style="font-size:13px;color:#52525b;margin:0 0 8px">${esc(request.customerName)} · ${esc(request.phone)}${request.email ? ` · ${esc(request.email)}` : ''}</p>
+       ${request.note ? `<p style="font-size:13px;color:#71717a;margin:0 0 20px">“${esc(request.note)}”</p>` : ''}
+       <p style="margin:8px 0 0">
+         <a href="${esc(`${appUrl()}/admin/requests`)}" style="background:#18181b;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 18px;border-radius:6px;display:inline-block">Open sourcing requests</a>
        </p>`
     ),
   };

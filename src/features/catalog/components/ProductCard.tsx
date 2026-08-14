@@ -1,5 +1,5 @@
 import React from 'react';
-import Image from 'next/image';
+import { SafeImage as Image } from '@/shared/ui/safe-image';
 import Link from 'next/link';
 import { Badge } from '@/shared/ui/badge';
 import { formatMinor } from '@/shared/lib/money';

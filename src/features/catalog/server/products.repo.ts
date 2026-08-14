@@ -2,7 +2,9 @@ import 'server-only';
 
 import { unstable_cache, revalidateTag } from 'next/cache';
 import {
+  orderItemsCollection,
   productImagesCollection,
+  productVideosCollection,
   productsCollection,
   specificationRowsCollection,
   specificationsCollection,
@@ -10,7 +12,7 @@ import {
   variantsCollection,
 } from '@/shared/db/collections';
 import { ensureSeeded } from '@/shared/db/seed';
-import type { Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant } from '@/features/catalog/types';
+import type { Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant, ProductVideo } from '@/features/catalog/types';
 
 export const PRODUCTS_TAG = 'products';
 
@@ -24,6 +26,7 @@ export interface ProductWithDetail {
   product: Product;
   variants: ProductVariant[];
   images: ProductImage[];
+  videos: ProductVideo[];
   specifications: Array<ProductSpecification & { rows: ProductSpecificationRow[] }>;
 }
 
@@ -100,16 +103,18 @@ async function loadProductDetail(
   const product = stripIds(await products.find(by).limit(1).toArray())[0];
   if (!product) return null;
 
-  const [variantsCol, imagesCol, specsCol, rowsCol] = await Promise.all([
+  const [variantsCol, imagesCol, videosCol, specsCol, rowsCol] = await Promise.all([
     variantsCollection(),
     productImagesCollection(),
+    productVideosCollection(),
     specificationsCollection(),
     specificationRowsCollection(),
   ]);
 
-  const [variants, images, specifications] = await Promise.all([
+  const [variants, images, videos, specifications] = await Promise.all([
     variantsCol.find({ productId: product.id }).sort({ sortOrder: 1 }).toArray(),
     imagesCol.find({ productId: product.id }).sort({ sortOrder: 1 }).toArray(),
+    videosCol.find({ productId: product.id }).sort({ sortOrder: 1 }).toArray(),
     specsCol.find({ productId: product.id }).sort({ sortOrder: 1 }).toArray(),
   ]);
 
@@ -122,6 +127,7 @@ async function loadProductDetail(
     product,
     variants: stripIds(variants),
     images: stripIds(images),
+    videos: stripIds(videos),
     specifications: stripIds(specifications).map((spec) => ({
       ...spec,
       rows: stripIds(rows.filter((r) => r.specificationId === spec.id)),
@@ -227,6 +233,7 @@ export interface ProductWriteInput {
   gstRatePercent: number;
   hsnCode?: string;
   imageUrls: string[];
+  videoUrls: string[];
   variants: Array<{
     id?: string;
     name: string;
@@ -257,9 +264,10 @@ function newId(prefix: string): string {
 }
 
 async function writeChildren(productId: string, input: ProductWriteInput): Promise<void> {
-  const [variantsCol, imagesCol, specsCol, rowsCol] = await Promise.all([
+  const [variantsCol, imagesCol, videosCol, specsCol, rowsCol] = await Promise.all([
     variantsCollection(),
     productImagesCollection(),
+    productVideosCollection(),
     specificationsCollection(),
     specificationRowsCollection(),
   ]);
@@ -301,6 +309,20 @@ async function writeChildren(productId: string, input: ProductWriteInput): Promi
         productId,
         url,
         alt: input.title,
+        sortOrder: index,
+      }))
+    );
+  }
+
+  // Videos carry no references of their own, so replace-in-place is safe.
+  await videosCol.deleteMany({ productId });
+  if (input.videoUrls.length > 0) {
+    await videosCol.insertMany(
+      input.videoUrls.map((url, index) => ({
+        id: newId('vid'),
+        productId,
+        url,
+        title: input.title,
         sortOrder: index,
       }))
     );
@@ -400,4 +422,54 @@ export async function archiveProduct(id: string): Promise<Product | null> {
   const variants = await variantsCollection();
   await variants.updateMany({ productId: id }, { $set: { isActive: false } });
   return setProductActive(id, false);
+}
+
+/** How many historical order items still point at this product. */
+export async function countProductOrderItems(id: string): Promise<number> {
+  const orderItems = await orderItemsCollection();
+  return orderItems.countDocuments({ productId: id });
+}
+
+export type DeleteProductResult =
+  | { status: 'deleted'; product: Product }
+  | { status: 'not-found' }
+  | { status: 'referenced'; product: Product; orderItemCount: number };
+
+/**
+ * Hard delete, for catalogue mistakes only — a product typed in wrong and never
+ * sold. If any order item references it the delete is refused and the caller is
+ * expected to archive instead: invoices, returns and margin reporting read those
+ * rows long after the product leaves the catalogue.
+ */
+export async function deleteProduct(id: string): Promise<DeleteProductResult> {
+  const products = await productsCollection();
+  const product = stripIds(await products.find({ id }).limit(1).toArray())[0];
+  if (!product) return { status: 'not-found' };
+
+  const orderItemCount = await countProductOrderItems(id);
+  if (orderItemCount > 0) return { status: 'referenced', product, orderItemCount };
+
+  const [variantsCol, imagesCol, videosCol, specsCol, rowsCol] = await Promise.all([
+    variantsCollection(),
+    productImagesCollection(),
+    productVideosCollection(),
+    specificationsCollection(),
+    specificationRowsCollection(),
+  ]);
+
+  const specIds = (await specsCol.find({ productId: id }, { projection: { id: 1 } }).toArray()).map(
+    (spec) => spec.id as string
+  );
+
+  // Children first: a failure halfway leaves orphans rather than a product that
+  // renders with missing variants.
+  await rowsCol.deleteMany({ specificationId: { $in: specIds } });
+  await specsCol.deleteMany({ productId: id });
+  await imagesCol.deleteMany({ productId: id });
+  await videosCol.deleteMany({ productId: id });
+  await variantsCol.deleteMany({ productId: id });
+  await products.deleteOne({ id });
+
+  revalidateCatalogue();
+  return { status: 'deleted', product };
 }

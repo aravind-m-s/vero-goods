@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import Script from 'next/script';
 import '@/shared/styles/globals.css';
 import { appUrl } from '@/shared/lib/config';
 import { ThemeProvider } from '@/shared/theme/ThemeProvider';
@@ -67,9 +68,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <head>
-        {/* Runs synchronously during HTML parsing, before the first paint, so a
-            visitor who chose dark never sees a flash of the light theme. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Injected into the initial HTML and run before any app code, so a
+            visitor who chose dark never sees a flash of the light theme.
+            next/script rather than a raw <script>: React never executes a
+            script element it renders on the client, and warns about it on every
+            client-side navigation. */}
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
       </head>
       <body className="flex min-h-full flex-col bg-surface-sunken text-ink">
         <ThemeProvider>{children}</ThemeProvider>

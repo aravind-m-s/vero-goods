@@ -8,6 +8,7 @@ import {
   getActiveProductSlugs,
   getProductBySlug,
 } from '@/features/catalog/server/products.repo';
+import { Badge } from '@/shared/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { appUrl } from '@/shared/lib/config';
 import { minorToRupees } from '@/shared/lib/money';
@@ -50,7 +51,7 @@ export default async function ProductDetailPage(props: PageProps<'/products/[slu
     notFound();
   }
 
-  const { product, variants, images, specifications } = detail;
+  const { product, variants, images, videos, specifications } = detail;
   const sellable = variants.filter((variant) => variant.isActive);
   const cheapest = sellable.reduce(
     (min, variant) => (variant.priceMinor < min ? variant.priceMinor : min),
@@ -110,8 +111,27 @@ export default async function ProductDetailPage(props: PageProps<'/products/[slu
         {product.title}
       </h1>
 
+      {/* Out of stock is stated once, prominently, at the top — the rest of the
+          page stays exactly as it is for an in-stock product. Nothing is
+          hidden, greyed out or disabled. */}
+      {!anyInStock && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-danger/40 bg-danger/5 px-4 py-3">
+          <Badge variant="danger">Out of stock</Badge>
+          <p className="text-xs text-ink-muted">
+            This product is unavailable right now. You can still see everything about it — and ask
+            us to source it with <span className="font-semibold text-ink">Get it for me</span>.
+          </p>
+        </div>
+      )}
+
       <div className="mt-8">
-        <ProductActions productTitle={product.title} images={images} variants={sellable} />
+        <ProductActions
+          productId={product.id}
+          productTitle={product.title}
+          images={images}
+          videos={videos}
+          variants={variants}
+        />
       </div>
 
       <section className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-2">

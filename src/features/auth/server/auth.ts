@@ -3,9 +3,13 @@ import 'server-only';
 import crypto from 'node:crypto';
 import { cookies } from 'next/headers';
 import { otpsCollection } from '@/shared/db/collections';
-import { findOrCreateCustomer, getCustomerById } from '@/features/auth/server/users.repo';
+import {
+  findOrCreateCustomer,
+  getCustomerById,
+  normaliseIdentifier,
+} from '@/features/auth/server/users.repo';
 import { randomNumericCode, safeEqual, sha256 } from '@/shared/lib/tokens';
-import type { User } from '@/features/auth/types';
+import type { OtpChannel, OtpPurpose, User } from '@/features/auth/types';
 import {
   ADMIN_COOKIE_NAME,
   ADMIN_SESSION_TTL_SECONDS,
@@ -106,23 +110,35 @@ export async function clearCustomerSession(): Promise<void> {
 
 // ---------------------------------------------------------------------- OTP
 
+export interface OtpRequest {
+  identifier: string;
+  channel: OtpChannel;
+  purpose?: OtpPurpose;
+  /** Carried to verification so a first-time signup lands with a real name. */
+  name?: string;
+}
+
 /**
- * Issues a login code. Only the SHA-256 of the code is persisted, so a database
- * leak does not hand over live login codes. The plaintext is returned once for
- * delivery by email and is never written down again.
+ * Issues a code for an email address or a phone number. Only the SHA-256 of the
+ * code is persisted, so a database leak does not hand over live login codes.
+ * The plaintext is returned once for delivery and is never written down again.
  */
-export async function createOtp(email: string): Promise<string> {
-  const normalised = email.trim().toLowerCase();
+export async function createOtp(request: OtpRequest): Promise<string> {
+  const identifier = normaliseIdentifier(request.identifier, request.channel);
+  const purpose: OtpPurpose = request.purpose ?? 'login';
   const code = randomNumericCode(6);
   const now = new Date();
 
   const otps = await otpsCollection();
   await otps.updateOne(
-    { email: normalised },
+    { identifier, purpose },
     {
       $set: {
-        email: normalised,
+        identifier,
+        channel: request.channel,
+        purpose,
         codeHash: sha256(code),
+        name: request.name?.trim() || undefined,
         expiresAt: new Date(now.getTime() + OTP_TTL_SECONDS * 1000),
         attempts: 0,
         createdAt: now,
@@ -136,28 +152,41 @@ export async function createOtp(email: string): Promise<string> {
 
 export type OtpFailure = 'invalid' | 'expired' | 'too_many_attempts';
 
-export async function verifyOtp(
-  email: string,
+interface ConsumeSuccess {
+  ok: true;
+  identifier: string;
+  channel: OtpChannel;
+  name?: string;
+}
+
+/**
+ * Checks a code and consumes it. Shared by both purposes — the caller decides
+ * what proving the identifier entitles you to (a session, or the right to move
+ * an address onto an existing account).
+ */
+export async function consumeOtp(
+  request: { identifier: string; channel: OtpChannel; purpose?: OtpPurpose },
   code: string
-): Promise<{ ok: true; user: User } | { ok: false; reason: OtpFailure }> {
-  const normalised = email.trim().toLowerCase();
+): Promise<ConsumeSuccess | { ok: false; reason: OtpFailure }> {
+  const identifier = normaliseIdentifier(request.identifier, request.channel);
+  const purpose: OtpPurpose = request.purpose ?? 'login';
   const otps = await otpsCollection();
 
   // Count the attempt before checking it, so a failed guess always costs the
   // attacker one of their five tries even if they abandon the response.
   const record = await otps.findOneAndUpdate(
-    { email: normalised },
+    { identifier, purpose },
     { $inc: { attempts: 1 } },
     { returnDocument: 'after' }
   );
 
   if (!record) return { ok: false, reason: 'expired' };
   if (record.expiresAt <= new Date()) {
-    await otps.deleteOne({ email: normalised });
+    await otps.deleteOne({ identifier, purpose });
     return { ok: false, reason: 'expired' };
   }
   if (record.attempts > MAX_OTP_ATTEMPTS) {
-    await otps.deleteOne({ email: normalised });
+    await otps.deleteOne({ identifier, purpose });
     return { ok: false, reason: 'too_many_attempts' };
   }
   if (!safeEqual(sha256(code), record.codeHash)) {
@@ -165,7 +194,32 @@ export async function verifyOtp(
   }
 
   // Single-use: consume the code the moment it succeeds.
-  await otps.deleteOne({ email: normalised });
-  const user = await findOrCreateCustomer(normalised);
-  return { ok: true, user };
+  await otps.deleteOne({ identifier, purpose });
+  return { ok: true, identifier, channel: record.channel, name: record.name };
+}
+
+/**
+ * Login path: proving the identifier creates or returns the customer account.
+ *
+ * `isNewAccount` is what lets the UI say "welcome back" to a returning customer
+ * who happened to tap Create account, instead of sending them round the signup
+ * loop for an account they already have.
+ */
+export async function verifyOtp(
+  request: { identifier: string; channel: OtpChannel; name?: string },
+  code: string
+): Promise<
+  { ok: true; user: User; isNewAccount: boolean } | { ok: false; reason: OtpFailure }
+> {
+  const result = await consumeOtp({ ...request, purpose: 'login' }, code);
+  if (!result.ok) return result;
+
+  const { user, created } = await findOrCreateCustomer({
+    identifier: result.identifier,
+    channel: result.channel,
+    // The name typed at request time wins; the one typed at verify time is the
+    // fallback for a client that only collected it on the second screen.
+    name: result.name ?? request.name,
+  });
+  return { ok: true, user, isNewAccount: created };
 }

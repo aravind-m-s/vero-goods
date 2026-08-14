@@ -9,15 +9,20 @@ import {
   AlertCircle,
   ArrowLeft,
   Banknote,
+  Check,
   Landmark,
   Lock,
-  Mail,
-  ShieldCheck,
+  MapPin,
+  Plus,
   ShoppingBag,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCart } from '@/features/cart/components/CartContext';
+import { AuthView } from '@/features/auth/components/AuthView';
+import type { PublicUser } from '@/features/auth/server/public-user';
+import type { Address } from '@/features/auth/types';
 import { CheckoutFormSchema } from '@/features/checkout/schemas';
+import { CheckoutAddressForm } from '@/features/checkout/components/CheckoutAddressForm';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
@@ -70,14 +75,19 @@ export function CheckoutView() {
   } = useCart();
   const { success: showSuccess, error: showError } = useToast();
 
-  const [customer, setCustomer] = useState<{ email: string; name: string; phone: string } | null>(
-    null
-  );
-  const [authStep, setAuthStep] = useState<'email' | 'otp' | 'verified'>('email');
-  const [emailInput, setEmailInput] = useState('');
-  const [otpInput, setOtpInput] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [customer, setCustomer] = useState<PublicUser | null>(null);
+  /**
+   * `restoring` until the session cookie has been checked *and*, for a signed-in
+   * customer, their addresses have arrived. Starting at `signin` flashed the
+   * login panel at every returning customer on every refresh, then replaced it
+   * with an empty address list, then with the default address — three layouts
+   * for what is one already-decided state.
+   */
+  const [sessionState, setSessionState] = useState<'restoring' | 'guest' | 'verified'>('restoring');
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('');
+  /** Opens the address fields on top of an existing list. */
+  const [isAddingAddress, setIsAddingAddress] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [simulation, setSimulation] = useState<RazorpaySession | null>(null);
 
@@ -95,10 +105,11 @@ export function CheckoutView() {
     formState: { errors },
   } = useForm<CheckoutFormValues>({
     resolver: zodResolver(CheckoutFormSchema),
-    defaultValues: { country: 'India', paymentMethod: 'RAZORPAY' },
+    defaultValues: { paymentMethod: 'RAZORPAY' },
   });
 
   const paymentMethod = watch('paymentMethod');
+  const selectedAddress = savedAddresses.find((item) => item.id === selectedAddressId) ?? null;
 
   // COD carries a handling fee, so the server quote is refreshed whenever the
   // payment method changes.
@@ -106,83 +117,76 @@ export function CheckoutView() {
     if (paymentMethod) void refreshQuote(paymentMethod);
   }, [paymentMethod, refreshQuote]);
 
-  const loadSession = useCallback(async () => {
+  /** Stored numbers carry the country code; the order API wants the 10 local digits. */
+  const toLocalPhone = (phone?: string) => (phone ? phone.replace(/\D/g, '').slice(-10) : '');
+
+  /** A newly saved address joins the list and becomes the one being shipped to. */
+  const acceptNewAddress = useCallback((address: Address) => {
+    setSavedAddresses((current) => [
+      address,
+      // The server allows exactly one default; mirror that here.
+      ...current.map((item) => (address.isDefault ? { ...item, isDefault: false } : item)),
+    ]);
+    setSelectedAddressId(address.id);
+    setIsAddingAddress(false);
+  }, []);
+
+  /**
+   * Restores the whole checkout in one pass: session, then addresses, then the
+   * choices made before the refresh. Nothing is rendered until it settles, so a
+   * returning customer sees the skeleton and then the finished page — never the
+   * login panel they already got past.
+   */
+  const restoreCheckout = useCallback(async () => {
+    const prefs = readCheckoutPrefs();
+    if (prefs.paymentMethod) setValue('paymentMethod', prefs.paymentMethod);
+
     try {
       const response = await fetch('/api/auth/otp');
-      if (!response.ok) return;
-      const data = (await response.json()) as {
-        user: { email: string; name: string; phone: string } | null;
-      };
-      if (data.user) {
-        setCustomer(data.user);
-        setAuthStep('verified');
-        setValue('email', data.user.email);
-        setValue('name', data.user.name);
-        if (data.user.phone) setValue('phone', data.user.phone);
+      const data = response.ok ? ((await response.json()) as { user: PublicUser | null }) : null;
+
+      // No session, or one the server has since expired: sign-in is genuinely
+      // needed, and only now is it shown.
+      if (!data?.user) {
+        setSessionState('guest');
+        return;
       }
+
+      setCustomer(data.user);
+      setValue('email', data.user.email ?? '');
+
+      // Saved addresses turn checkout into two clicks for a returning customer:
+      // pick a card, pay. No address fields are shown at all.
+      const addressResponse = await fetch('/api/account/addresses');
+      const addresses = addressResponse.ok
+        ? ((await addressResponse.json()) as { addresses: Address[] }).addresses
+        : [];
+      setSavedAddresses(addresses);
+
+      // The address chosen before the refresh wins, but only while it still
+      // exists — it may have been deleted from the address book meanwhile.
+      const remembered = addresses.find((item) => item.id === prefs.addressId);
+      const preferred = remembered ?? addresses.find((item) => item.isDefault) ?? addresses[0];
+      setSelectedAddressId(preferred?.id ?? '');
     } catch {
-      // Not signed in — the auth panel handles it.
+      // The session could not be checked at all. Treat it as signed out rather
+      // than stranding the customer on a spinner.
+      setSessionState('guest');
+      return;
     }
+
+    setSessionState('verified');
   }, [setValue]);
 
   useEffect(() => {
-    void loadSession();
-  }, [loadSession]);
+    void restoreCheckout();
+  }, [restoreCheckout]);
 
-  const handleSendOtp = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsAuthLoading(true);
-    setAuthError('');
-    try {
-      const response = await fetch('/api/auth/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailInput }),
-      });
-      const data = (await response.json()) as { error?: string; message?: string };
-      if (!response.ok) {
-        setAuthError(data.error ?? 'Could not send the verification code');
-        return;
-      }
-      setAuthStep('otp');
-      showSuccess(data.message ?? 'Verification code sent');
-    } catch {
-      setAuthError('Network error. Please try again.');
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsAuthLoading(true);
-    setAuthError('');
-    try {
-      const response = await fetch('/api/auth/otp', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailInput, code: otpInput }),
-      });
-      const data = (await response.json()) as {
-        error?: string;
-        user?: { email: string; name: string; phone: string };
-      };
-      if (!response.ok || !data.user) {
-        setAuthError(data.error ?? 'Invalid or expired code');
-        return;
-      }
-      setCustomer(data.user);
-      setAuthStep('verified');
-      setValue('email', data.user.email);
-      setValue('name', data.user.name);
-      if (data.user.phone) setValue('phone', data.user.phone);
-      showSuccess('Signed in');
-    } catch {
-      setAuthError('Verification failed. Please try again.');
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
+  // Remember the choices so a refresh mid-checkout costs nothing.
+  useEffect(() => {
+    if (sessionState !== 'verified') return;
+    writeCheckoutPrefs({ addressId: selectedAddressId, paymentMethod });
+  }, [sessionState, selectedAddressId, paymentMethod]);
 
   const goToSuccess = (trackingToken: string, orderNumber: string) => {
     clearPurchased();
@@ -205,7 +209,7 @@ export function CheckoutView() {
 
       if (verification.status === 202) {
         // Gateway unreachable; the webhook will settle it. Never lose the order.
-        showSuccess('Payment received. We will email your confirmation shortly.');
+        showSuccess('Payment received. We will email your receipt shortly.');
         goToSuccess(session.trackingToken, session.orderNumber);
         return;
       }
@@ -217,7 +221,7 @@ export function CheckoutView() {
       showSuccess('Payment confirmed');
       goToSuccess(session.trackingToken, session.orderNumber);
     } catch {
-      showError('Could not confirm the payment. Check your email for confirmation.');
+      showError('Could not confirm the payment. Check your email for the receipt.');
       setIsPlacingOrder(false);
     }
   };
@@ -243,7 +247,7 @@ export function CheckoutView() {
       name: 'Vero Goods',
       description: `Order ${session.orderNumber}`,
       order_id: session.razorpayOrderId,
-      prefill: { email: customer?.email, contact: watch('phone') },
+      prefill: { email: customer?.email, contact: toLocalPhone(selectedAddress?.phone) },
       handler: (response: Record<string, string>) => {
         void verifyPayment(session, response);
       },
@@ -261,6 +265,10 @@ export function CheckoutView() {
       showError('Your cart is empty');
       return;
     }
+    if (!selectedAddress) {
+      showError('Choose a delivery address first');
+      return;
+    }
     setIsPlacingOrder(true);
 
     try {
@@ -268,15 +276,24 @@ export function CheckoutView() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: values.name,
-          phone: values.phone,
+          name: selectedAddress.fullName,
+          phone: toLocalPhone(selectedAddress.phone),
+          // Where the receipt goes. A customer who signed in by mobile types it
+          // here; for everyone else it is their account address.
+          email: values.email,
+          // Copied field by field, not sent as an id: the order keeps this
+          // address even if the saved one is edited or deleted later.
           shippingAddress: {
-            line1: values.line1,
-            line2: values.line2,
-            city: values.city,
-            state: values.state,
-            pinCode: values.pinCode,
-            country: values.country,
+            line1: selectedAddress.line1,
+            line2: selectedAddress.line2 ?? undefined,
+            city: selectedAddress.city,
+            state: selectedAddress.state,
+            pinCode: selectedAddress.pinCode,
+            country: selectedAddress.country,
+            fullName: selectedAddress.fullName,
+            phone: toLocalPhone(selectedAddress.phone),
+            label: selectedAddress.label,
+            sourceAddressId: selectedAddress.id,
           },
           paymentMethod: values.paymentMethod,
           items: lines.map((line) => ({ variantId: line.variantId, quantity: line.quantity })),
@@ -339,6 +356,10 @@ export function CheckoutView() {
     }
   };
 
+  // The cart lives in localStorage and the session in a cookie; neither is
+  // readable during the first render. One skeleton covers both.
+  const isRestoring = sessionState === 'restoring' || !isHydrated;
+
   if (isHydrated && cartCount === 0 && !isPlacingOrder) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-3 px-4 py-24 text-center">
@@ -357,172 +378,142 @@ export function CheckoutView() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 sm:px-6 lg:px-8">
-      <header className="mb-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+      {/* Tighter on phones: the sign-in card used to start most of a screen
+          down, under a full-size title and a wide step rail. */}
+      <header className="mb-4 sm:mb-8">
         <Link
           href="/"
           className="inline-flex items-center gap-1 text-xs text-ink-subtle transition-colors hover:text-accent"
         >
           <ArrowLeft className="h-3 w-3" /> Continue shopping
         </Link>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink sm:text-3xl">Checkout</h1>
-        <ol className="mt-4 flex items-center gap-2 text-2xs font-semibold uppercase tracking-wide">
-          <Step index={1} label="Verify" active={authStep !== 'verified'} done={authStep === 'verified'} />
-          <span aria-hidden="true" className="h-px w-6 bg-line-strong" />
-          <Step index={2} label="Address" active={authStep === 'verified'} done={false} />
-          <span aria-hidden="true" className="h-px w-6 bg-line-strong" />
-          <Step index={3} label="Pay" active={false} done={false} />
+        <h1 className="mt-1.5 text-xl font-bold tracking-tight text-ink sm:mt-2 sm:text-3xl">
+          Checkout
+        </h1>
+        <ol className="mt-3 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide sm:mt-4 sm:gap-2">
+          <Step
+            index={1}
+            label="Verify"
+            active={sessionState === 'guest'}
+            done={sessionState === 'verified'}
+          />
+          <span aria-hidden="true" className="h-px w-4 bg-line-strong sm:w-6" />
+          <Step
+            index={2}
+            label="Address"
+            active={sessionState === 'verified' && !selectedAddress}
+            done={Boolean(selectedAddress)}
+          />
+          <span aria-hidden="true" className="h-px w-4 bg-line-strong sm:w-6" />
+          <Step index={3} label="Pay" active={Boolean(selectedAddress)} done={false} />
         </ol>
       </header>
 
-      {authStep !== 'verified' ? (
-        <div className="mx-auto w-full max-w-md">
-          <Card>
-            <CardHeader className="items-center text-center">
-              <div className="mx-auto mb-1 flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft">
-                <ShieldCheck className="h-5 w-5 text-accent" />
-              </div>
-              <CardTitle className="text-base">Verify your email</CardTitle>
-              <p className="text-xs leading-relaxed text-ink-subtle">
-                We send a one-time code so your order and tracking link stay tied to you. No
-                password, no account setup.
-              </p>
-            </CardHeader>
-            <CardContent>
-              {authStep === 'email' ? (
-                <form onSubmit={handleSendOtp} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="auth-email">Email address</Label>
-                    <div className="relative">
-                      <Input
-                        id="auth-email"
-                        type="email"
-                        autoComplete="email"
-                        placeholder="you@example.com"
-                        value={emailInput}
-                        onChange={(event) => setEmailInput(event.target.value)}
-                        className="pl-10"
-                        required
-                      />
-                      <Mail className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-ink-subtle" />
-                    </div>
-                  </div>
-                  {authError && <AuthError message={authError} />}
-                  <Button type="submit" variant="accent" className="w-full" isLoading={isAuthLoading}>
-                    Send verification code
-                  </Button>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="auth-code">6-digit code</Label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAuthStep('email');
-                          setAuthError('');
-                        }}
-                        className="cursor-pointer text-xs text-ink-subtle underline"
-                      >
-                        Change email
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <Input
-                        id="auth-code"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        maxLength={6}
-                        placeholder="000000"
-                        value={otpInput}
-                        onChange={(event) =>
-                          setOtpInput(event.target.value.replace(/\D/g, '').slice(0, 6))
-                        }
-                        className="pl-10 text-center text-lg font-bold tracking-[0.4em]"
-                        required
-                      />
-                      <Lock className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-ink-subtle" />
-                    </div>
-                    <p className="text-2xs text-ink-subtle">Sent to {emailInput}</p>
-                  </div>
-                  {authError && <AuthError message={authError} />}
-                  <Button type="submit" variant="accent" className="w-full" isLoading={isAuthLoading}>
-                    Verify and continue
-                  </Button>
-                </form>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+      {isRestoring ? (
+        <CheckoutSkeleton />
+      ) : sessionState === 'guest' ? (
+        <AuthView next="/checkout" compact />
       ) : (
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12"
-        >
+        // Not a <form>: the address panel has its own form for saving a new
+        // address, and forms cannot nest.
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
           <div className="space-y-6 lg:col-span-7">
             <Card>
-              <CardHeader>
-                <CardTitle>Delivery address</CardTitle>
-                <p className="text-xs text-ink-subtle">Signed in as {customer?.email}</p>
+              <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+                <div className="min-w-0">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <MapPin className="h-4 w-4 shrink-0 text-ink-subtle" /> Delivery address
+                  </CardTitle>
+                  <p className="mt-1 truncate text-xs text-ink-subtle">
+                    Signed in as{' '}
+                    {customer?.email ?? (customer?.phone ? `+${customer.phone}` : customer?.name)}
+                  </p>
+                </div>
+                {savedAddresses.length > 0 && !isAddingAddress && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 gap-1.5"
+                    onClick={() => setIsAddingAddress(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add new
+                  </Button>
+                )}
               </CardHeader>
-              <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field id="name" label="Full name" error={errors.name?.message}>
-                  <Input id="name" autoComplete="name" error={errors.name?.message} {...register('name')} />
-                </Field>
-                <Field id="phone" label="Mobile number" error={errors.phone?.message}>
-                  <Input
-                    id="phone"
-                    inputMode="numeric"
-                    autoComplete="tel-national"
-                    placeholder="9876543210"
-                    error={errors.phone?.message}
-                    {...register('phone')}
-                  />
-                </Field>
-                <div className="sm:col-span-2">
-                  <Field id="line1" label="Address line 1" error={errors.line1?.message}>
+              <CardContent className="space-y-4">
+                {!customer?.email && (
+                  <Field id="email" label="Email for your receipt" error={errors.email?.message}>
                     <Input
-                      id="line1"
-                      autoComplete="address-line1"
-                      error={errors.line1?.message}
-                      {...register('line1')}
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      error={errors.email?.message}
+                      {...register('email')}
                     />
                   </Field>
-                </div>
-                <div className="sm:col-span-2">
-                  <Field id="line2" label="Address line 2 (optional)" error={errors.line2?.message}>
-                    <Input id="line2" autoComplete="address-line2" {...register('line2')} />
-                  </Field>
-                </div>
-                <Field id="city" label="City" error={errors.city?.message}>
-                  <Input
-                    id="city"
-                    autoComplete="address-level2"
-                    error={errors.city?.message}
-                    {...register('city')}
+                )}
+
+                {savedAddresses.length > 0 && !isAddingAddress ? (
+                  // Nothing to type: the saved addresses are the whole step.
+                  <div
+                    role="radiogroup"
+                    aria-label="Delivery address"
+                    className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                  >
+                    {savedAddresses.map((address) => {
+                      const isSelected = selectedAddressId === address.id;
+                      return (
+                        <button
+                          key={address.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          onClick={() => setSelectedAddressId(address.id)}
+                          className={cn(
+                            'flex h-full cursor-pointer flex-col rounded-control border p-3 text-left transition-colors',
+                            isSelected
+                              ? 'border-accent bg-accent-soft/30'
+                              : 'border-line hover:border-ink-subtle'
+                          )}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="min-w-0 truncate text-xs font-bold text-ink">
+                              {address.label}
+                            </span>
+                            {address.isDefault && <Badge variant="secondary">Default</Badge>}
+                            {isSelected && (
+                              <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-accent" />
+                            )}
+                          </span>
+                          <span className="mt-1 block text-2xs font-semibold text-ink-muted">
+                            {address.fullName}
+                          </span>
+                          <span className="mt-0.5 block text-2xs leading-relaxed text-ink-muted">
+                            {address.line1}
+                            {address.line2 ? `, ${address.line2}` : ''}
+                            <br />
+                            {address.city}, {address.state} {address.pinCode}
+                            <br />
+                            <span className="text-ink-subtle">{address.phone}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <CheckoutAddressForm
+                    defaultName={customer?.name}
+                    defaultPhone={toLocalPhone(customer?.phone)}
+                    makeDefault={savedAddresses.length === 0}
+                    onSaved={acceptNewAddress}
+                    onCancel={
+                      savedAddresses.length > 0 ? () => setIsAddingAddress(false) : undefined
+                    }
                   />
-                </Field>
-                <Field id="state" label="State" error={errors.state?.message}>
-                  <Input
-                    id="state"
-                    autoComplete="address-level1"
-                    error={errors.state?.message}
-                    {...register('state')}
-                  />
-                </Field>
-                <Field id="pinCode" label="PIN code" error={errors.pinCode?.message}>
-                  <Input
-                    id="pinCode"
-                    inputMode="numeric"
-                    autoComplete="postal-code"
-                    error={errors.pinCode?.message}
-                    {...register('pinCode')}
-                  />
-                </Field>
-                <Field id="country" label="Country" error={errors.country?.message}>
-                  <Input id="country" readOnly className="bg-surface-sunken" {...register('country')} />
-                </Field>
+                )}
               </CardContent>
             </Card>
 
@@ -599,17 +590,23 @@ export function CheckoutView() {
                 </dl>
 
                 <Button
-                  type="submit"
+                  type="button"
                   variant="accent"
                   size="lg"
                   className="w-full"
+                  onClick={handleSubmit(onSubmit)}
                   isLoading={isPlacingOrder || isPricing}
-                  disabled={lines.length === 0}
+                  disabled={lines.length === 0 || !selectedAddress}
                 >
                   {paymentMethod === 'COD'
                     ? `Place order · ${formatMinor(totals.totalMinor)}`
                     : `Pay ${formatMinor(totals.totalMinor)}`}
                 </Button>
+                {!selectedAddress && (
+                  <p className="text-center text-2xs text-ink-subtle">
+                    Add a delivery address to continue
+                  </p>
+                )}
                 <p className="flex items-center justify-center gap-1.5 text-2xs text-ink-subtle">
                   <Lock className="h-3 w-3" />
                   Prices are re-confirmed on the server before payment
@@ -617,7 +614,7 @@ export function CheckoutView() {
               </CardContent>
             </Card>
           </div>
-        </form>
+        </div>
       )}
 
       <Dialog open={simulation !== null} onClose={() => setSimulation(null)}>
@@ -663,6 +660,101 @@ export function CheckoutView() {
       </Dialog>
     </div>
   );
+}
+
+/**
+ * Address and payment choices survive a refresh. Session storage, not local:
+ * they belong to this checkout in this tab, and a stale pick should not follow
+ * the customer into next week's order.
+ */
+const PREFS_KEY = 'vero.checkout.prefs.v1';
+
+interface CheckoutPrefs {
+  addressId?: string;
+  paymentMethod?: 'COD' | 'RAZORPAY';
+}
+
+function readCheckoutPrefs(): CheckoutPrefs {
+  try {
+    const raw = sessionStorage.getItem(PREFS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as CheckoutPrefs;
+    return {
+      addressId: typeof parsed.addressId === 'string' ? parsed.addressId : undefined,
+      paymentMethod:
+        parsed.paymentMethod === 'COD' || parsed.paymentMethod === 'RAZORPAY'
+          ? parsed.paymentMethod
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function writeCheckoutPrefs(prefs: CheckoutPrefs): void {
+  try {
+    sessionStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // Private browsing or a full quota. Losing the preference is not an error
+    // worth interrupting a checkout for.
+  }
+}
+
+/**
+ * Shown while the session and addresses are being restored. It mirrors the real
+ * layout, so the page does not jump when the content lands.
+ */
+function CheckoutSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12"
+    >
+      <span className="sr-only">Loading your checkout details</span>
+      <div className="space-y-6 lg:col-span-7">
+        <Card>
+          <CardHeader>
+            <Bar className="h-4 w-40" />
+            <Bar className="mt-2 h-3 w-56" />
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Bar className="h-24 w-full" />
+            <Bar className="h-24 w-full" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <Bar className="h-4 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            <Bar className="h-14 w-full" />
+            <Bar className="h-14 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+      <div className="lg:col-span-5">
+        <Card>
+          <CardHeader>
+            <Bar className="h-4 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Bar className="h-3 w-full" />
+            <Bar className="h-3 w-4/5" />
+            <Bar className="h-3 w-2/3" />
+            <Separator />
+            <Bar className="h-6 w-full" />
+            <Bar className="h-11 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Bar({ className }: { className?: string }) {
+  return <span className={cn('block animate-pulse rounded bg-surface-sunken', className)} />;
 }
 
 function loadRazorpayScript(): Promise<boolean> {

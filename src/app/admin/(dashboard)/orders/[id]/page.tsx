@@ -121,6 +121,10 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   // will be rejected.
   const allowedNext = ALLOWED_STATUS_TRANSITIONS[order.orderStatus];
   const requiresTracking = nextStatus === OrderStatus.SHIPPED;
+  // Prepaid orders cannot be confirmed before the money is captured.
+  const paymentBlocksConfirm =
+    order.paymentMethod !== 'COD' && order.paymentStatus !== PaymentStatus.PAID;
+  const confirmBlocked = nextStatus === OrderStatus.CONFIRMED && paymentBlocksConfirm;
 
   return (
     <div className="space-y-6">
@@ -288,11 +292,22 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                     >
                       <option value="">Select a status…</option>
                       {allowedNext.map((status) => (
-                        <option key={status} value={status}>
+                        <option
+                          key={status}
+                          value={status}
+                          disabled={status === OrderStatus.CONFIRMED && paymentBlocksConfirm}
+                        >
                           {status.replace(/_/g, ' ')}
                         </option>
                       ))}
                     </Select>
+                    {order.orderStatus === OrderStatus.PLACED && (
+                      <p className="text-2xs text-ink-subtle">
+                        {paymentBlocksConfirm
+                          ? 'Payment is not captured yet, so this order cannot be confirmed.'
+                          : 'This order is waiting for you to confirm it.'}
+                      </p>
+                    )}
                   </div>
 
                   {requiresTracking && (
@@ -324,7 +339,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   <Button
                     className="w-full"
                     onClick={handleUpdate}
-                    disabled={!nextStatus || (requiresTracking && (!courier || !trackingNumber))}
+                    disabled={
+                      !nextStatus ||
+                      confirmBlocked ||
+                      (requiresTracking && (!courier || !trackingNumber))
+                    }
                     isLoading={isUpdating}
                   >
                     Update status
@@ -350,6 +369,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <p className="text-ink-muted">{order.phone}</p>
               <Separator className="bg-line" />
               <p className="text-ink-muted">
+                {/* Snapshot from the moment the order was placed. */}
+                {order.shippingAddress.fullName ?? order.customerName}
+                <br />
                 {order.shippingAddress.line1}
                 {order.shippingAddress.line2 && `, ${order.shippingAddress.line2}`}
                 <br />
