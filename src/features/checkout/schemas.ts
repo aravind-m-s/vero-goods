@@ -4,7 +4,16 @@ import { z } from 'zod';
 
 export const AddressSchema = z.object({
   line1: z.string().min(5, 'Address Line 1 must be at least 5 characters').max(200),
-  line2: z.string().max(200).optional(),
+  /**
+   * Nullable, not merely optional: an address saved without a second line is
+   * stored as `null` by the driver, so that is what comes back and gets sent
+   * here. Normalised to `undefined` so the order never carries a null.
+   */
+  line2: z
+    .string()
+    .max(200)
+    .nullish()
+    .transform((value) => value ?? undefined),
   city: z.string().min(2, 'City is required').max(80),
   state: z.string().min(2, 'State is required').max(80),
   pinCode: z.string().regex(/^\d{6}$/, 'Invalid Indian PIN code (must be 6 digits)'),

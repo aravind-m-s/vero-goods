@@ -62,7 +62,12 @@ export async function createAddress(userId: string, input: AddressInput): Promis
   };
 
   if (address.isDefault) await clearDefault(userId);
-  await addresses.insertOne({ ...address });
+  // The driver writes an explicit `null` for an `undefined` value, and a null
+  // line2 fails validation when the address is later sent to the order API.
+  // Omitting the key keeps the stored document matching the type.
+  const document = { ...address };
+  if (document.line2 === undefined) delete document.line2;
+  await addresses.insertOne(document);
   return address;
 }
 
@@ -89,7 +94,14 @@ export async function updateAddress(
     const value = input[key];
     if (value !== undefined) set[key] = value.trim();
   }
-  if (input.line2 !== undefined) set.line2 = input.line2.trim() || undefined;
+  // Clearing line2 removes the field rather than setting it to null; see the
+  // note in createAddress.
+  const unset: Record<string, ''> = {};
+  if (input.line2 !== undefined) {
+    const line2 = input.line2.trim();
+    if (line2) set.line2 = line2;
+    else unset.line2 = '';
+  }
 
   if (input.isDefault === true) {
     await clearDefault(userId);
@@ -98,7 +110,7 @@ export async function updateAddress(
 
   const result = await addresses.findOneAndUpdate(
     { id, userId },
-    { $set: set },
+    Object.keys(unset).length > 0 ? { $set: set, $unset: unset } : { $set: set },
     { returnDocument: 'after' }
   );
   return stripId(result);
