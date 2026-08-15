@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ADMIN_COOKIE_NAME, verifySessionValue } from '@/features/auth/server/session';
 
+const NOINDEX = 'noindex, nofollow, noarchive';
+
 /**
  * Optimistic gate for the admin portal. This only checks that the cookie is a
  * signature-valid, unexpired admin session — every admin API route re-checks
@@ -16,11 +18,21 @@ export async function proxy(request: NextRequest) {
     if (session?.role !== 'admin') {
       const loginUrl = new URL('/admin/login', request.url);
       loginUrl.searchParams.set('next', pathname);
-      return NextResponse.redirect(loginUrl);
+      const redirect = NextResponse.redirect(loginUrl);
+      redirect.headers.set('X-Robots-Tag', NOINDEX);
+      return redirect;
     }
   }
 
   const response = NextResponse.next();
+
+  // Keep the admin portal out of search results. Sent as a header rather than a
+  // <meta> tag because the admin layouts are client components (which cannot
+  // export metadata), and because a header also covers the redirect above and
+  // any non-HTML response under /admin.
+  if (pathname.startsWith('/admin')) {
+    response.headers.set('X-Robots-Tag', NOINDEX);
+  }
 
   // Baseline hardening headers. A storefront handling addresses and payments
   // should not be framable or sniffable.

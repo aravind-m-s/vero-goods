@@ -17,7 +17,16 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCart } from '@/features/cart/components/CartContext';
+import {
+  clearPurchased,
+  refreshQuote,
+  useCheckoutCount,
+  useCheckoutLines,
+  useCheckoutTotals,
+  useIsCartHydrated,
+  useIsCheckoutPricing,
+  useIsDirectBuy,
+} from '@/features/cart/store/cart.store';
 import { AuthView } from '@/features/auth/components/AuthView';
 import type { PublicUser } from '@/features/auth/server/public-user';
 import type { Address } from '@/features/auth/types';
@@ -61,18 +70,14 @@ declare global {
 
 export function CheckoutView() {
   const router = useRouter();
-  // Checkout buys whatever the cart context says is being bought — the cart, or
-  // a single "buy now" item that never entered it.
-  const {
-    checkoutLines: lines,
-    checkoutTotals: totals,
-    checkoutCount: cartCount,
-    isCheckoutPricing: isPricing,
-    isDirectBuy,
-    clearPurchased,
-    refreshQuote,
-    isHydrated,
-  } = useCart();
+  // Checkout buys whatever the cart store says is being bought — the cart, or a
+  // single "buy now" item that never entered it.
+  const lines = useCheckoutLines();
+  const totals = useCheckoutTotals();
+  const cartCount = useCheckoutCount();
+  const isPricing = useIsCheckoutPricing();
+  const isDirectBuy = useIsDirectBuy();
+  const isHydrated = useIsCartHydrated();
   const { success: showSuccess, error: showError } = useToast();
 
   const [customer, setCustomer] = useState<PublicUser | null>(null);
@@ -112,10 +117,11 @@ export function CheckoutView() {
   const selectedAddress = savedAddresses.find((item) => item.id === selectedAddressId) ?? null;
 
   // COD carries a handling fee, so the server quote is refreshed whenever the
-  // payment method changes.
+  // payment method changes — and only then. `refreshQuote` is a module-level
+  // function, so this no longer re-fires every time the basket changes.
   useEffect(() => {
     if (paymentMethod) void refreshQuote(paymentMethod);
-  }, [paymentMethod, refreshQuote]);
+  }, [paymentMethod]);
 
   /** Stored numbers carry the country code; the order API wants the 10 local digits. */
   const toLocalPhone = (phone?: string) => (phone ? phone.replace(/\D/g, '').slice(-10) : '');

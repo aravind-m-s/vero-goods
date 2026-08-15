@@ -25,6 +25,7 @@ import {
   TableRow,
 } from '@/shared/ui/table';
 import { useToast } from '@/shared/ui/toast';
+import { useRowNavigation } from '@/shared/ui/use-row-navigation';
 import {
   ALLOWED_STATUS_TRANSITIONS,
   OrderStatus,
@@ -70,6 +71,7 @@ function paymentVariant(status: PaymentStatus): 'success' | 'warning' | 'danger'
 
 export default function AdminOrdersPage() {
   const { success, error } = useToast();
+  const rowNavigation = useRowNavigation();
   const [orders, setOrders] = useState<Order[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -467,7 +469,12 @@ export default function AdminOrdersPage() {
               </TableRow>
             ) : (
               orders.map((order) => (
-                <TableRow key={order.id} data-selected={selectedIds.has(order.id) || undefined}>
+                <TableRow
+                  key={order.id}
+                  data-selected={selectedIds.has(order.id) || undefined}
+                  className="cursor-pointer"
+                  {...rowNavigation(`/admin/orders/${order.id}`)}
+                >
                   <TableCell>
                     <input
                       type="checkbox"

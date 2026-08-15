@@ -43,6 +43,7 @@ import {
   TableRow,
 } from '@/shared/ui/table';
 import { useToast } from '@/shared/ui/toast';
+import { useRowNavigation } from '@/shared/ui/use-row-navigation';
 import { formatMinor } from '@/shared/lib/money';
 
 interface AdminProductRow {
@@ -109,6 +110,7 @@ function conversionPercent(product: AdminProductRow): number | null {
 
 export default function AdminProductsPage() {
   const { success, error } = useToast();
+  const rowNavigation = useRowNavigation();
   const [products, setProducts] = useState<AdminProductRow[]>([]);
   const [windowDays, setWindowDays] = useState(30);
   const [isLoading, setIsLoading] = useState(true);
@@ -360,7 +362,11 @@ export default function AdminProductsPage() {
                 const conversion = conversionPercent(product);
 
                 return (
-                  <TableRow key={product.id}>
+                  <TableRow
+                    key={product.id}
+                    className="cursor-pointer"
+                    {...rowNavigation(`/admin/products/${product.id}/edit`)}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-3">
                         {product.imageUrl && (

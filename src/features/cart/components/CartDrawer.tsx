@@ -3,17 +3,22 @@
 import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
-import { useCart } from '@/features/cart/components/CartContext';
+import { useCartCount, useCartLines, useCartStore } from '@/features/cart/store/cart.store';
 import { Button } from '@/shared/ui/button';
 import { formatMinor } from '@/shared/lib/money';
 import { cn } from '@/shared/lib/utils';
 
 /**
- * Line prices and totals come from the server quote held in CartContext, so
+ * Line prices and totals come from the server quote held in the cart store, so
  * what the drawer shows is exactly what checkout will charge.
  */
 export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { lines, totals, updateQuantity, removeFromCart, isPricing, cartCount } = useCart();
+  const lines = useCartLines();
+  const totals = useCartStore((state) => state.totals);
+  const isPricing = useCartStore((state) => state.isPricing);
+  const cartCount = useCartCount();
+  const updateQuantity = useCartStore((state) => state.updateQuantity);
+  const removeFromCart = useCartStore((state) => state.removeFromCart);
 
   useEffect(() => {
     if (!open) return;
@@ -151,7 +156,15 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
         {lines.length > 0 && (
           <footer className="space-y-3 border-t border-line bg-surface-raised px-5 py-4">
-            <dl className="space-y-1.5 text-xs">
+            {/* Quantities update instantly; only the server-owned totals below
+                settle a moment later, so they fade rather than block the drawer. */}
+            <dl
+              className={cn(
+                'space-y-1.5 text-xs transition-opacity duration-150',
+                isPricing && 'opacity-50'
+              )}
+              aria-busy={isPricing}
+            >
               <div className="flex justify-between text-ink-muted">
                 <dt>Subtotal</dt>
                 <dd className="tabular-nums">{formatMinor(totals.subtotalMinor)}</dd>
@@ -173,7 +186,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             </dl>
 
             <Link href="/checkout" onClick={onClose} className="block">
-              <Button variant="accent" size="lg" className="w-full" isLoading={isPricing}>
+              <Button variant="accent" size="lg" className="w-full">
                 Checkout · {formatMinor(totals.totalMinor)}
               </Button>
             </Link>
