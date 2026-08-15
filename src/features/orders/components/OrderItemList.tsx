@@ -72,7 +72,6 @@ export function OrderTotals({ order, showTax = true }: { order: Order; showTax?:
       {order.codFeeMinor > 0 && (
         <SummaryRow label="COD handling fee" value={formatMinor(order.codFeeMinor)} />
       )}
-      {showTax && <SummaryRow label="Tax included" value={formatMinor(order.taxMinor)} muted />}
 
       <div className="flex justify-between border-t border-line pt-2 text-base font-bold text-ink">
         <dt>Total</dt>
