@@ -318,7 +318,12 @@ export default function AdminProductsPage() {
         </div>
       </div>
 
-      <div className="rounded-card border border-line">
+      {/* The dashboard shell is `bg-surface-sunken`, so a table with no surface
+          of its own sat directly on the page tint. `bg-surface-raised` is the
+          same token Card uses — white in light, #1a1a1f in dark — which is what
+          makes the row hover (`bg-surface-sunken`) read as a change at all.
+          `overflow-hidden` keeps the first and last rows inside the rounding. */}
+      <div className="overflow-hidden rounded-card border border-line bg-surface-raised">
         <Table>
           <TableHeader>
             <TableRow>

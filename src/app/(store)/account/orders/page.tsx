@@ -60,9 +60,21 @@ export default async function OrderHistoryPage({
           <li key={order.id}>
             <Link href={`/account/orders/${order.id}`} className="block">
               <Card className="transition-colors hover:border-ink-subtle">
-                <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+                {/* One column on a phone, one row from `sm` up.
+                    `flex-wrap` alone used to drop the status/total/chevron group
+                    onto a second line as a right-aligned huddle, leaving the
+                    fixed 96px money column stranded mid-row. Below `sm` the
+                    total now sits beside the order number where the eye already
+                    is, the status badge gets its own line, and the chevron —
+                    which pointed at a whole tappable card — is dropped. */}
+                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-5">
                   <div className="min-w-0 flex-1">
-                    <p className="font-mono text-sm font-bold text-ink">{order.orderNumber}</p>
+                    <div className="flex items-baseline justify-between gap-3 sm:block">
+                      <p className="font-mono text-sm font-bold text-ink">{order.orderNumber}</p>
+                      <span className="shrink-0 text-sm font-bold tabular-nums text-ink sm:hidden">
+                        {formatMinor(order.totalMinor)}
+                      </span>
+                    </div>
                     <p className="mt-1 text-2xs text-ink-subtle">
                       Placed{' '}
                       {new Date(order.createdAt).toLocaleDateString('en-IN', {
@@ -77,13 +89,13 @@ export default async function OrderHistoryPage({
                   </div>
 
                   {/* Fixed-width money column keeps the badges and chevrons in
-                      a straight line down the list. */}
+                      a straight line down the list, from `sm` up. */}
                   <div className="flex shrink-0 items-center gap-4">
                     <OrderStatusBadge status={order.orderStatus} />
-                    <span className="w-24 text-right text-sm font-bold tabular-nums text-ink">
+                    <span className="hidden w-24 text-right text-sm font-bold tabular-nums text-ink sm:inline">
                       {formatMinor(order.totalMinor)}
                     </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-ink-subtle" />
+                    <ChevronRight className="hidden h-4 w-4 shrink-0 text-ink-subtle sm:block" />
                   </div>
                 </CardContent>
               </Card>

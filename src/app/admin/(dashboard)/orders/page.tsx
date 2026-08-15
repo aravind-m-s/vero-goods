@@ -422,7 +422,8 @@ export default function AdminOrdersPage() {
         </div>
       )}
 
-      <div className="rounded-card border border-line">
+      {/* Matches the products table — see the note there. */}
+      <div className="overflow-hidden rounded-card border border-line bg-surface-raised">
         <Table>
           <TableHeader>
             <TableRow>
