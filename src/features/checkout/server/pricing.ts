@@ -5,7 +5,7 @@ import type { TaxLine } from '@/features/orders/types';
  * Commercial rules. These are business decisions, not technical ones — they are
  * env-overridable so they can be changed without a deploy.
  *
- * Defaults chosen: ₹99 flat shipping, free over ₹2,000, ₹49 COD handling fee.
+ * Defaults chosen: ₹80 flat shipping, free over ₹2,000, ₹20 COD handling fee.
  * Retail prices are GST-INCLUSIVE (Indian retail convention), so tax is
  * back-computed for the invoice and never added on top of the displayed price.
  */
@@ -16,10 +16,10 @@ function envMinor(name: string, fallbackMinor: number): number {
   return Number.isFinite(parsed) ? Math.round(parsed) : fallbackMinor;
 }
 
-export const SHIPPING_FLAT_MINOR = () => envMinor('SHIPPING_FLAT_MINOR', 9900);
+export const SHIPPING_FLAT_MINOR = () => envMinor('SHIPPING_FLAT_MINOR', 8000);
 export const FREE_SHIPPING_THRESHOLD_MINOR = () =>
   envMinor('FREE_SHIPPING_THRESHOLD_MINOR', 200000);
-export const COD_FEE_MINOR = () => envMinor('COD_FEE_MINOR', 4900);
+export const COD_FEE_MINOR = () => envMinor('COD_FEE_MINOR', 2000);
 /** COD is refused above this value — unrecoverable loss if the customer refuses delivery. */
 export const COD_MAX_ORDER_MINOR = () => envMinor('COD_MAX_ORDER_MINOR', 2000000);
 

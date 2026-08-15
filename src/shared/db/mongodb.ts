@@ -145,6 +145,21 @@ export async function ensureIndexes(): Promise<void> {
         db.collection('productSpecifications').createIndex({ productId: 1, sortOrder: 1 }),
         db.collection('productSpecificationRows').createIndex({ specificationId: 1, sortOrder: 1 }),
 
+        // Analytics rows are cheap individually and endless in aggregate, so
+        // they expire rather than accumulating forever. Ninety days is long
+        // enough to compare a month against the month before it.
+        db.collection('productViews').createIndex({ productId: 1, at: -1 }),
+        db.collection('productViews').createIndex(
+          { at: 1 },
+          { expireAfterSeconds: 60 * 60 * 24 * 90 }
+        ),
+        db.collection('cartAdds').createIndex({ productId: 1, at: -1 }),
+        db.collection('cartAdds').createIndex({ at: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 }),
+
+        // Deliberately no TTL: a price change from a year ago is exactly what
+        // you need when reading a year of sales.
+        db.collection('priceHistory').createIndex({ productId: 1, at: -1 }),
+
         db.collection('orders').createIndex({ id: 1 }, { unique: true }),
         db.collection('orders').createIndex({ orderNumber: 1 }, { unique: true }),
         db.collection('orders').createIndex({ trackingToken: 1 }, { unique: true }),

@@ -1,6 +1,5 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { SafeImage as Image } from '@/shared/ui/safe-image';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, ExternalLink, MapPin, Receipt } from 'lucide-react';
@@ -8,12 +7,12 @@ import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Separator } from '@/shared/ui/separator';
+import { OrderItemList, OrderTotals } from '@/features/orders/components/OrderItemList';
 import { OrderStatusBadge, STATUS_LABELS } from '@/features/orders/components/OrderStatusBadge';
 import { OrderTimeline } from '@/features/orders/components/OrderTimeline';
 import { getSessionCustomer } from '@/features/auth/server/auth';
 import { getCustomerOrder, getOrderItems } from '@/features/orders/server/orders.repo';
 import { PaymentStatus } from '@/features/orders/types';
-import { formatMinor } from '@/shared/lib/money';
 
 export const metadata: Metadata = {
   title: 'Order details',
@@ -72,60 +71,8 @@ export default async function AccountOrderDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {items.map((item) => (
-                <div key={item.id} className="flex gap-3">
-                  {item.imageUrl ? (
-                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-control bg-surface-sunken">
-                      <Image
-                        src={item.imageUrl}
-                        alt=""
-                        fill
-                        sizes="64px"
-                        className="object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-16 w-16 shrink-0 rounded-control bg-surface-sunken" />
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-ink">{item.productTitle}</p>
-                    {item.variantName !== 'Default' && (
-                      <p className="text-2xs text-ink-muted">{item.variantName}</p>
-                    )}
-                    <p className="font-mono text-3xs text-ink-subtle">{item.sku}</p>
-                    <p className="mt-1 text-xs text-ink-muted">
-                      {item.quantity} × {formatMinor(item.unitPriceMinor)}
-                    </p>
-                  </div>
-
-                  <p className="w-24 shrink-0 text-right text-sm font-bold tabular-nums text-ink">
-                    {formatMinor(item.totalMinor)}
-                  </p>
-                </div>
-              ))}
-
-              <Separator className="bg-line" />
-
-              <dl className="space-y-1.5 text-xs">
-                <SummaryRow label="Subtotal" value={formatMinor(order.subtotalMinor)} />
-                <SummaryRow
-                  label="Shipping"
-                  value={order.shippingMinor === 0 ? 'Free' : formatMinor(order.shippingMinor)}
-                />
-                {order.codFeeMinor > 0 && (
-                  <SummaryRow label="COD handling fee" value={formatMinor(order.codFeeMinor)} />
-                )}
-                <SummaryRow
-                  label="Tax included"
-                  value={formatMinor(order.taxMinor)}
-                  muted
-                />
-                <div className="flex justify-between border-t border-line pt-2 text-base font-bold text-ink">
-                  <dt>Total</dt>
-                  <dd className="tabular-nums">{formatMinor(order.totalMinor)}</dd>
-                </div>
-              </dl>
+              <OrderItemList items={items} />
+              <OrderTotals order={order} />
             </CardContent>
           </Card>
 
@@ -234,22 +181,5 @@ export default async function AccountOrderDetailPage({
         </div>
       </div>
     </>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  muted,
-}: {
-  label: string;
-  value: string;
-  muted?: boolean;
-}) {
-  return (
-    <div className={`flex justify-between ${muted ? 'text-ink-subtle' : 'text-ink-muted'}`}>
-      <dt>{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
-    </div>
   );
 }

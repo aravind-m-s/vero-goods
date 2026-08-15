@@ -9,8 +9,14 @@ import {
   setProductActive,
   skuExists,
   slugExists,
+  unarchiveProduct,
 } from '@/features/catalog/server/products.repo';
 import { ProductFormSchema, issuesToFieldErrors } from '@/features/catalog/schemas';
+import {
+  DEFAULT_WINDOW_DAYS,
+  getProductOrderCounts,
+  getProductViewStats,
+} from '@/features/analytics/server/views.repo';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +31,24 @@ export async function GET() {
   const denied = await requireAdmin();
   if (denied) return denied;
 
-  return NextResponse.json({ products: await listAdminProducts() });
+  // Views and orders are read alongside the catalogue so the list can show
+  // which products get looked at and never bought — the number that decides
+  // whether to fix the price, fix the photos, or drop the product.
+  const [products, views, orders] = await Promise.all([
+    listAdminProducts(),
+    getProductViewStats(),
+    getProductOrderCounts(),
+  ]);
+
+  return NextResponse.json({
+    windowDays: DEFAULT_WINDOW_DAYS,
+    products: products.map((product) => ({
+      ...product,
+      views: views.get(product.id)?.views ?? 0,
+      uniqueViewers: views.get(product.id)?.uniqueViewers ?? 0,
+      orderCount: orders.get(product.id) ?? 0,
+    })),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -115,9 +138,31 @@ export async function PATCH(request: NextRequest) {
   const denied = await requireAdmin();
   if (denied) return denied;
 
-  const body = (await request.json()) as { id?: string; isActive?: boolean };
-  if (!body.id || typeof body.isActive !== 'boolean') {
-    return NextResponse.json({ error: 'Product ID and isActive are required' }, { status: 400 });
+  const body = (await request.json()) as {
+    id?: string;
+    isActive?: boolean;
+    archived?: boolean;
+  };
+  if (!body.id) {
+    return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
+  }
+
+  // Archiving is `DELETE ?mode=archive`; this side of the switch only ever
+  // brings a product back, so an archived product cannot be published straight
+  // onto the storefront by flipping isActive without leaving the archive first.
+  if (body.archived === false) {
+    const product = await unarchiveProduct(body.id);
+    if (!product) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+    return NextResponse.json({ success: true, product });
+  }
+
+  if (typeof body.isActive !== 'boolean') {
+    return NextResponse.json(
+      { error: 'Either isActive or archived: false is required' },
+      { status: 400 }
+    );
   }
 
   const product = await setProductActive(body.id, body.isActive);

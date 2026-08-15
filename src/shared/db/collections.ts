@@ -5,6 +5,7 @@ import { ensureIndexes, getMongoDb } from '@/shared/db/mongodb';
 import type { Address, OtpRecord, User } from '@/features/auth/types';
 import type { Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant, ProductVideo } from '@/features/catalog/types';
 import type { Order, OrderItem } from '@/features/orders/types';
+import type { CartAdd, PriceChange, ProductView } from '@/features/analytics/types';
 import type { ProductRequest } from '@/features/requests/types';
 import type { Counter } from '@/shared/db/types';
 
@@ -33,6 +34,9 @@ export const specificationsCollection = () =>
   collection<WithMongoId<ProductSpecification>>('productSpecifications');
 export const specificationRowsCollection = () =>
   collection<WithMongoId<ProductSpecificationRow>>('productSpecificationRows');
+export const productViewsCollection = () => collection<WithMongoId<ProductView>>('productViews');
+export const cartAddsCollection = () => collection<WithMongoId<CartAdd>>('cartAdds');
+export const priceHistoryCollection = () => collection<WithMongoId<PriceChange>>('priceHistory');
 export const ordersCollection = () => collection<WithMongoId<Order>>('orders');
 export const orderItemsCollection = () => collection<WithMongoId<OrderItem>>('orderItems');
 export const otpsCollection = () => collection<WithMongoId<OtpRecord>>('otps');

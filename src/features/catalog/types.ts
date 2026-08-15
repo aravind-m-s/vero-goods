@@ -27,6 +27,15 @@ export interface Product {
   gstRatePercent: number;
   /** HSN code — required on a compliant Indian GST invoice. */
   hsnCode?: string;
+  /**
+   * Set when the product is retired, cleared when it is brought back.
+   *
+   * Distinct from `isActive: false`, which is "off the shelf for now".
+   * Archived means "done with this", and is what keeps a retired catalogue out
+   * of the working list without deleting rows that invoices still point at.
+   * Absent on every product that has never been archived, so no migration.
+   */
+  archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

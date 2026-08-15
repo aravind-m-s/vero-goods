@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
+import { ProductViewBeacon } from '@/features/analytics/components/ProductViewBeacon';
 import { ProductActions } from '@/features/catalog/components/ProductActions';
 import {
   getActiveProductSlugs,
@@ -98,6 +99,10 @@ export default async function ProductDetailPage(props: PageProps<'/products/[slu
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
+
+      {/* Client-side on purpose: this page is statically generated and counting
+          the view on the server would make every product page dynamic. */}
+      <ProductViewBeacon productId={product.id} />
 
       <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs text-ink-subtle">
         <Link href="/" className="transition-colors hover:text-accent">

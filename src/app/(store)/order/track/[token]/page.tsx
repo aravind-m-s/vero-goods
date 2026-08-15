@@ -7,10 +7,9 @@ import { OrderTimeline } from '@/features/orders/components/OrderTimeline';
 import { Badge } from '@/shared/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Separator } from '@/shared/ui/separator';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/ui/table';
+import { OrderItemList, OrderTotals } from '@/features/orders/components/OrderItemList';
 import { getOrderByTrackingToken, getOrderItems } from '@/features/orders/server/orders.repo';
 import { OrderStatus } from '@/features/orders/types';
-import { formatMinor } from '@/shared/lib/money';
 
 // Order state changes at any moment and the page is per-customer, so it is
 // always rendered fresh — but never cached or indexed.
@@ -188,65 +187,11 @@ export default async function OrderTrackingPage(props: PageProps<'/order/track/[
             <Info className="h-4 w-4 text-ink-muted" /> Items
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0 sm:p-6 sm:pt-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead className="text-center">Qty</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">
-                    {item.productTitle}
-                    {item.variantName !== 'Default' && (
-                      <span className="text-ink-muted"> · {item.variantName}</span>
-                    )}
-                    <span className="block font-mono text-3xs text-ink-subtle">{item.sku}</span>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatMinor(item.unitPriceMinor)}
-                  </TableCell>
-                  <TableCell className="text-center font-bold text-ink-muted">
-                    {item.quantity}
-                  </TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">
-                    {formatMinor(item.totalMinor)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          <dl className="space-y-1.5 border-t border-line px-4 py-4 text-xs sm:px-0">
-            <SummaryRow label="Subtotal" value={formatMinor(order.subtotalMinor)} />
-            <SummaryRow
-              label="Shipping"
-              value={order.shippingMinor === 0 ? 'Free' : formatMinor(order.shippingMinor)}
-            />
-            {order.codFeeMinor > 0 && (
-              <SummaryRow label="COD handling fee" value={formatMinor(order.codFeeMinor)} />
-            )}
-            <div className="flex justify-between border-t border-line pt-2 text-base font-bold text-ink">
-              <dt>Grand total</dt>
-              <dd className="tabular-nums">{formatMinor(order.totalMinor)}</dd>
-            </div>
-          </dl>
+        <CardContent className="space-y-4">
+          <OrderItemList items={items} />
+          <OrderTotals order={order} />
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between text-ink-muted">
-      <dt>{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
     </div>
   );
 }
