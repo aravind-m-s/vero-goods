@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import Script from 'next/script';
 import '@/shared/styles/globals.css';
 import { appUrl } from '@/shared/lib/config';
 import { ThemeProvider } from '@/shared/theme/ThemeProvider';
@@ -68,16 +67,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <head>
-        {/* Injected into the initial HTML and run before any app code, so a
-            visitor who chose dark never sees a flash of the light theme.
-            next/script rather than a raw <script>: React never executes a
-            script element it renders on the client, and warns about it on every
-            client-side navigation. */}
-        <Script
-          id="theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
-        />
+        {/* A raw <script>, deliberately not next/script.
+            `strategy="beforeInteractive"` does not emit an inline script at
+            all — it emits a `self.__next_s.push(...)` queue entry that only
+            runs once the Next runtime chunk has loaded, which is long after
+            first paint. The result was a full-page flash of the OS theme on
+            every load. This runs synchronously while the browser parses the
+            head, which is the whole point.
+            See node_modules/next/dist/docs/01-app/02-guides/preventing-flash-before-hydration.md */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col bg-surface-sunken text-ink">
         <ThemeProvider>{children}</ThemeProvider>
