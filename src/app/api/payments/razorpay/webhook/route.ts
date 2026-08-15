@@ -11,6 +11,8 @@ import {
 } from '@/features/orders/server/orders.repo';
 import { sendEmail } from '@/shared/email/send';
 import { orderReceivedEmail } from '@/shared/email/templates';
+import { sendDiscord } from '@/shared/discord/send';
+import { orderPlacedDiscord } from '@/shared/discord/templates';
 import { verifyWebhookSignature } from '@/features/payments/server/razorpay';
 import { recordPaymentAlert, resolvePaymentAlert } from '@/features/payments/server/alerts.repo';
 
@@ -160,12 +162,18 @@ async function handleEvent(event: RazorpayWebhookPayload): Promise<EventOutcome>
       }
 
       const paid = await markOrderPaid(order.id, payment.id, payment.order_id);
-      // null means the browser callback already settled it — nothing to do.
+      // null means the browser callback already settled it — and sent both
+      // notifications — so there is nothing to do here.
       if (paid) {
         const invoiceNumber = await nextInvoiceNumber();
         await setInvoiceNumber(paid.id, invoiceNumber);
         const items = await getOrderItems(paid.id);
-        await sendEmail(orderReceivedEmail({ ...paid, invoiceNumber }, items));
+        const settled = { ...paid, invoiceNumber };
+        // Awaited rather than deferred: Razorpay is the caller here, not a
+        // shopper waiting on a screen, and a 2xx sent before the work finished
+        // would retire an event whose side effects had not happened yet.
+        await sendEmail(orderReceivedEmail(settled, items));
+        await sendDiscord(orderPlacedDiscord(settled, items));
       }
 
       // A retry that finally found its order closes the alert the earlier

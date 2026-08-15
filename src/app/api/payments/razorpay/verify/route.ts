@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { getSessionCustomer } from '@/features/auth/server/auth';
 import {
   getOrderById,
@@ -11,6 +11,8 @@ import {
 import { PaymentStatus } from '@/features/orders/types';
 import { sendEmail } from '@/shared/email/send';
 import { orderReceivedEmail } from '@/shared/email/templates';
+import { sendDiscord } from '@/shared/discord/send';
+import { orderPlacedDiscord } from '@/shared/discord/templates';
 import {
   SIMULATED_SIGNATURE,
   fetchRazorpayPayment,
@@ -152,7 +154,17 @@ export async function POST(request: NextRequest) {
   await setInvoiceNumber(paid.id, invoiceNumber);
 
   const items = await getOrderItems(paid.id);
-  await sendEmail(orderReceivedEmail({ ...paid, invoiceNumber }, items));
+  const settled = { ...paid, invoiceNumber };
+
+  // `markOrderPaid` is the guarded single-document update both this route and
+  // the webhook race for, and only the winner gets a non-null order back — so
+  // hanging the notifications off it is what stops the same order being
+  // announced twice. Deferred past the response so the shopper's success screen
+  // is not waiting on Gmail's SMTP handshake or on Discord.
+  after(async () => {
+    await sendEmail(orderReceivedEmail(settled, items));
+    await sendDiscord(orderPlacedDiscord(settled, items));
+  });
 
   return NextResponse.json({
     success: true,
