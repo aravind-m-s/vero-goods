@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowLeft, Save, Sparkles } from 'lucide-react';
@@ -10,11 +10,15 @@ import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
 import { Textarea } from '@/shared/ui/textarea';
 import { useToast } from '@/shared/ui/toast';
-import { MediaUploader } from '@/features/admin/components/MediaUploader';
+import { MediaGallery } from '@/features/admin/components/MediaGallery';
+import {
+  MediaUploader,
+  deleteCloudinaryAsset,
+  type UploadKind,
+} from '@/features/admin/components/MediaUploader';
 import { SpecificationBuilder, type SpecSection } from '@/features/admin/components/SpecificationBuilder';
 import { VariantBuilder, type VariantDraft } from '@/features/admin/components/VariantBuilder';
 import { FORM_ERROR_KEY, ProductFormSchema, issuesToFieldErrors } from '@/features/catalog/schemas';
-import { isAllowedImageHost } from '@/shared/lib/image-hosts';
 
 /**
  * Turns a dotted schema path into something an admin recognises, e.g.
@@ -82,8 +86,18 @@ export function ProductForm({
   const [isActive, setIsActive] = useState(initial.isActive);
   const [gstRatePercent, setGstRatePercent] = useState(String(initial.gstRatePercent));
   const [hsnCode, setHsnCode] = useState(initial.hsnCode ?? '');
-  const [imagesText, setImagesText] = useState(initial.imageUrls.join('\n'));
-  const [videosText, setVideosText] = useState(initial.videoUrls.join('\n'));
+  const [imageUrls, setImageUrls] = useState<string[]>(initial.imageUrls);
+  const [videoUrls, setVideoUrls] = useState<string[]>(initial.videoUrls);
+  /**
+   * Media that belonged to the saved product and has been removed here.
+   *
+   * Held back rather than destroyed on the spot: until the form saves, the
+   * product in the database still points at these files, and deleting one and
+   * then navigating away would leave a live listing with a broken image.
+   */
+  const [pendingDeletions, setPendingDeletions] = useState<
+    Array<{ url: string; kind: UploadKind }>
+  >([]);
   const [variants, setVariants] = useState<VariantDraft[]>(initial.variants);
   const [specifications, setSpecifications] = useState<SpecSection[]>(initial.specifications);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -92,43 +106,42 @@ export function ProductForm({
 
   const errorEntries = Object.entries(fieldErrors);
 
-  /** Image hosts that will render but cannot go through next/image. */
-  const unoptimisedHosts = Array.from(
-    new Set(
-      imagesText
-        .split('\n')
-        .map((url) => url.trim())
-        .filter((url) => url && !isAllowedImageHost(url))
-        .map((url) => {
-          try {
-            return new URL(url).hostname;
-          } catch {
-            return url.slice(0, 40);
-          }
-        })
-    )
-  );
-
   /** First message on `prefix` itself or any path beneath it. */
   const firstErrorFor = (prefix: string) =>
     errorEntries.find(([path]) => path === prefix || path.startsWith(`${prefix}.`))?.[1];
 
-  /**
-   * The uploader and the textarea edit the same list, so an upload appends a
-   * line and discarding one takes that line back out. Keeping the textarea as
-   * the source of truth means a pasted supplier URL and an uploaded file are
-   * the same thing to everything downstream.
-   */
-  const appendUrl = (setText: React.Dispatch<React.SetStateAction<string>>) => (url: string) =>
-    setText((current) => (current.trim() ? `${current.replace(/\n+$/, '')}\n${url}` : url));
+  /** What the product already pointed at when this form opened. */
+  const savedMedia = useMemo(
+    () => new Set([...initial.imageUrls, ...initial.videoUrls]),
+    [initial.imageUrls, initial.videoUrls]
+  );
 
-  const removeUrl = (setText: React.Dispatch<React.SetStateAction<string>>) => (url: string) =>
-    setText((current) =>
-      current
-        .split('\n')
-        .filter((line) => line.trim() !== url)
-        .join('\n')
+  const addMedia = (kind: UploadKind) => (url: string) =>
+    (kind === 'image' ? setImageUrls : setVideoUrls)((current) =>
+      current.includes(url) ? current : [...current, url]
     );
+
+  /**
+   * Detaches media from the product and takes it out of Cloudinary too, so an
+   * abandoned upload does not sit in the account being paid for.
+   *
+   * Something uploaded in this session goes immediately — nothing references it
+   * yet. Something the saved product still points at only goes once the save
+   * succeeds; see `pendingDeletions`.
+   */
+  const removeMedia = (kind: UploadKind) => (url: string) => {
+    (kind === 'image' ? setImageUrls : setVideoUrls)((current) =>
+      current.filter((item) => item !== url)
+    );
+
+    if (savedMedia.has(url)) {
+      setPendingDeletions((current) =>
+        current.some((item) => item.url === url) ? current : [...current, { url, kind }]
+      );
+      return;
+    }
+    void deleteCloudinaryAsset(url, kind);
+  };
 
   /**
    * Nested fields (variants, suppliers, specification rows) fail far below the
@@ -184,14 +197,8 @@ export function ProductForm({
       isActive,
       gstRatePercent: Number(gstRatePercent),
       hsnCode: hsnCode || undefined,
-      imageUrls: imagesText
-        .split('\n')
-        .map((url) => url.trim())
-        .filter(Boolean),
-      videoUrls: videosText
-        .split('\n')
-        .map((url) => url.trim())
-        .filter(Boolean),
+      imageUrls,
+      videoUrls,
       variants: variants.map((variant) => ({
         ...variant,
         price: Number(variant.price),
@@ -252,6 +259,14 @@ export function ProductForm({
         );
         return;
       }
+
+      // The product no longer points at these, so the files can go now. Failures
+      // are deliberately ignored: the save is the part that mattered, and an
+      // orphaned file is a storage cost, not a broken product.
+      await Promise.all(
+        pendingDeletions.map((item) => deleteCloudinaryAsset(item.url, item.kind))
+      );
+      setPendingDeletions([]);
 
       success(mode === 'create' ? 'Product created' : 'Product updated');
       router.push('/admin/products');
@@ -404,57 +419,28 @@ export function ProductForm({
               <CardTitle className="text-sm font-bold">Product media</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="images-list">Image URLs (one per line)</Label>
-                <Textarea
-                  id="images-list"
-                  rows={5}
-                  value={imagesText}
-                  onChange={(event) => setImagesText(event.target.value)}
-                  placeholder={'https://example.com/image1.jpg\nhttps://example.com/image2.jpg'}
-                  className="font-mono text-xs leading-normal"
-                  error={firstErrorFor('imageUrls')}
-                />
-                {unoptimisedHosts.length > 0 ? (
-                  <p className="mt-1 text-3xs leading-normal text-warning">
-                    {unoptimisedHosts.join(', ')} {unoptimisedHosts.length === 1 ? 'is' : 'are'} not
-                    in the optimised-image allowlist. These still display, but at full size and
-                    without WebP/AVIF. Add the host to `src/shared/lib/image-hosts.ts` to optimise
-                    them.
-                  </p>
-                ) : (
-                  <p className="mt-1 text-3xs leading-normal text-ink-subtle">
-                    Hosts listed in `src/shared/lib/image-hosts.ts` are optimised; anything else
-                    still renders, just unoptimised.
-                  </p>
+              <div className="space-y-2">
+                <Label>Images ({imageUrls.length}/10)</Label>
+                <MediaGallery kind="image" urls={imageUrls} onRemove={removeMedia('image')} />
+                {firstErrorFor('imageUrls') && (
+                  <p className="text-xs font-medium text-danger">{firstErrorFor('imageUrls')}</p>
                 )}
-                <MediaUploader
-                  kind="image"
-                  onUploaded={appendUrl(setImagesText)}
-                  onRemoved={removeUrl(setImagesText)}
-                />
+                <p className="text-3xs leading-normal text-ink-subtle">
+                  The first image is what the catalogue card and search results show.
+                </p>
+                <MediaUploader kind="image" onUploaded={addMedia('image')} />
               </div>
 
-              <div className="space-y-1 border-t border-line pt-3">
-                <Label htmlFor="videos-list">Video URLs (one per line)</Label>
-                <Textarea
-                  id="videos-list"
-                  rows={4}
-                  value={videosText}
-                  onChange={(event) => setVideosText(event.target.value)}
-                  placeholder={'https://youtu.be/dQw4w9WgXcQ\nhttps://cdn.example.com/demo.mp4'}
-                  className="font-mono text-xs leading-normal"
-                  error={firstErrorFor('videoUrls')}
-                />
-                <p className="mt-1 text-3xs leading-normal text-ink-subtle">
-                  YouTube or Vimeo links play as embeds; .mp4 / .webm links play inline. Videos
-                  appear after the images in the product gallery.
+              <div className="space-y-2 border-t border-line pt-3">
+                <Label>Videos ({videoUrls.length}/6)</Label>
+                <MediaGallery kind="video" urls={videoUrls} onRemove={removeMedia('video')} />
+                {firstErrorFor('videoUrls') && (
+                  <p className="text-xs font-medium text-danger">{firstErrorFor('videoUrls')}</p>
+                )}
+                <p className="text-3xs leading-normal text-ink-subtle">
+                  Videos appear after the images in the product gallery.
                 </p>
-                <MediaUploader
-                  kind="video"
-                  onUploaded={appendUrl(setVideosText)}
-                  onRemoved={removeUrl(setVideosText)}
-                />
+                <MediaUploader kind="video" onUploaded={addMedia('video')} />
               </div>
             </CardContent>
           </Card>

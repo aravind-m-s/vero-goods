@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { Trash2, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
+import { cloudinaryPublicId } from '@/shared/cloudinary/public-id';
 
-type UploadKind = 'image' | 'video';
+export type UploadKind = 'image' | 'video';
 
 interface SignedUpload {
   cloudName: string;
@@ -16,11 +17,26 @@ interface SignedUpload {
   maxBytes: number;
 }
 
-/** An asset uploaded during this editing session, still discardable. */
-interface SessionAsset {
-  publicId: string;
-  url: string;
-  name: string;
+/**
+ * Removes an asset from the Cloudinary account, given its delivery URL.
+ *
+ * Silent by design: the URL has already left the product, so a file left behind
+ * is a storage cost rather than anything the admin can act on. Returns false
+ * when the URL is not ours to delete (a legacy supplier CDN link) or the call
+ * failed, so a caller that wants to say something still can.
+ */
+export async function deleteCloudinaryAsset(url: string, kind: UploadKind): Promise<boolean> {
+  const publicId = cloudinaryPublicId(url);
+  if (!publicId) return false;
+  try {
+    const response = await fetch(
+      `/api/admin/uploads?publicId=${encodeURIComponent(publicId)}&kind=${kind}`,
+      { method: 'DELETE' }
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 function formatBytes(bytes: number): string {
@@ -44,16 +60,12 @@ function formatBytes(bytes: number): string {
 export function MediaUploader({
   kind,
   onUploaded,
-  onRemoved,
 }: {
   kind: UploadKind;
   /** Called per successful upload with the delivery URL to add to the list. */
   onUploaded: (url: string) => void;
-  /** Called when an upload is discarded, so the parent drops the URL again. */
-  onRemoved: (url: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [assets, setAssets] = useState<SessionAsset[]>([]);
   const [busy, setBusy] = useState<{ name: string; percent: number } | null>(null);
   const [queued, setQueued] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
@@ -61,7 +73,7 @@ export function MediaUploader({
   const accept = kind === 'video' ? 'video/*' : 'image/*';
 
   const uploadOne = (file: File, signed: SignedUpload) =>
-    new Promise<SessionAsset>((resolve, reject) => {
+    new Promise<string>((resolve, reject) => {
       const form = new FormData();
       // Exactly the signed parameters, nothing more: Cloudinary recomputes the
       // signature over them and rejects the upload if anything else is added.
@@ -87,11 +99,10 @@ export function MediaUploader({
         try {
           const body = JSON.parse(request.responseText) as {
             secure_url?: string;
-            public_id?: string;
             error?: { message: string };
           };
-          if (request.status >= 200 && request.status < 300 && body.secure_url && body.public_id) {
-            resolve({ publicId: body.public_id, url: body.secure_url, name: file.name });
+          if (request.status >= 200 && request.status < 300 && body.secure_url) {
+            resolve(body.secure_url);
           } else {
             reject(new Error(body.error?.message ?? `Upload failed (${request.status})`));
           }
@@ -138,9 +149,7 @@ export function MediaUploader({
     setQueued(toUpload.length);
     for (const file of toUpload) {
       try {
-        const asset = await uploadOne(file, signed);
-        setAssets((current) => [...current, asset]);
-        onUploaded(asset.url);
+        onUploaded(await uploadOne(file, signed));
       } catch (uploadError) {
         // One bad file does not abandon the rest of the batch.
         setMessage(
@@ -152,21 +161,6 @@ export function MediaUploader({
     }
     setBusy(null);
     if (inputRef.current) inputRef.current.value = '';
-  };
-
-  const discard = async (asset: SessionAsset) => {
-    setAssets((current) => current.filter((item) => item.publicId !== asset.publicId));
-    onRemoved(asset.url);
-    try {
-      await fetch(
-        `/api/admin/uploads?publicId=${encodeURIComponent(asset.publicId)}&kind=${kind}`,
-        { method: 'DELETE' }
-      );
-    } catch {
-      // The URL is already out of the product; a leftover file is a storage
-      // cost, not a broken product, so it does not deserve a blocking error.
-      setMessage(`${asset.name} was removed from the product but may still be in Cloudinary`);
-    }
   };
 
   const isUploading = busy !== null || queued > 0;
@@ -196,7 +190,8 @@ export function MediaUploader({
           Upload {kind === 'video' ? 'videos' : 'images'}
         </Button>
         <span className="text-2xs text-ink-subtle">
-          Uploaded files are added to the list above.
+          Uploaded straight to Cloudinary. {kind === 'video' ? 'Videos' : 'Images'} appear above as
+          soon as they finish.
         </span>
       </div>
 
@@ -216,23 +211,6 @@ export function MediaUploader({
             <p className="text-2xs text-ink-subtle">{queued - 1} more waiting</p>
           )}
         </div>
-      )}
-
-      {assets.length > 0 && (
-        <ul className="space-y-1">
-          {assets.map((asset) => (
-            <li key={asset.publicId} className="flex items-center justify-between gap-2 text-2xs">
-              <span className="truncate text-ink-muted">{asset.name}</span>
-              <button
-                type="button"
-                onClick={() => void discard(asset)}
-                className="flex shrink-0 items-center gap-1 text-ink-subtle hover:text-danger"
-              >
-                <Trash2 className="h-3 w-3" /> Discard
-              </button>
-            </li>
-          ))}
-        </ul>
       )}
 
       {message && <p className="text-2xs font-medium text-danger">{message}</p>}
