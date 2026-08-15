@@ -53,11 +53,15 @@ export function OrderItemList({ items }: { items: OrderItem[] }) {
 /**
  * The money summary under the items.
  *
- * Tax is shown as included rather than added: retail prices here are
- * GST-inclusive, so listing it as another line would read as a second charge on
- * top of the total.
+ * Tax, where it is shown, is shown as included rather than added: retail prices
+ * here are GST-inclusive, so listing it as another line would read as a second
+ * charge on top of the total.
+ *
+ * `showTax` is off on the public tracking page, which anyone holding the link
+ * can open — it is a delivery status view, not the receipt. The account order
+ * page keeps it, because that is where the customer goes for the invoice.
  */
-export function OrderTotals({ order }: { order: Order }) {
+export function OrderTotals({ order, showTax = true }: { order: Order; showTax?: boolean }) {
   return (
     <dl className="space-y-1.5 border-t border-line pt-4 text-xs">
       <SummaryRow label="Subtotal" value={formatMinor(order.subtotalMinor)} />
@@ -68,7 +72,7 @@ export function OrderTotals({ order }: { order: Order }) {
       {order.codFeeMinor > 0 && (
         <SummaryRow label="COD handling fee" value={formatMinor(order.codFeeMinor)} />
       )}
-      <SummaryRow label="Tax included" value={formatMinor(order.taxMinor)} muted />
+      {showTax && <SummaryRow label="Tax included" value={formatMinor(order.taxMinor)} muted />}
 
       <div className="flex justify-between border-t border-line pt-2 text-base font-bold text-ink">
         <dt>Total</dt>

@@ -5,6 +5,7 @@ import { ensureIndexes, getMongoDb } from '@/shared/db/mongodb';
 import type { Address, OtpRecord, User } from '@/features/auth/types';
 import type { Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant, ProductVideo } from '@/features/catalog/types';
 import type { Order, OrderItem } from '@/features/orders/types';
+import type { PaymentAlert } from '@/features/payments/types';
 import type { CartAdd, PriceChange, ProductView } from '@/features/analytics/types';
 import type { ProductRequest } from '@/features/requests/types';
 import type { Counter } from '@/shared/db/types';
@@ -45,6 +46,8 @@ export const rateLimitsCollection = () =>
   collection<{ key: string; count: number; expiresAt: Date }>('rateLimits');
 export const webhookEventsCollection = () =>
   collection<{ eventId: string; receivedAt: Date }>('webhookEvents');
+export const paymentAlertsCollection = () =>
+  collection<WithMongoId<PaymentAlert>>('paymentAlerts');
 
 /** Drops Mongo's `_id` so documents can cross the server/client boundary. */
 export function stripId<T>(doc: WithMongoId<T> | null): T | null {

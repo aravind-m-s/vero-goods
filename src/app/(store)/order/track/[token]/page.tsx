@@ -189,7 +189,7 @@ export default async function OrderTrackingPage(props: PageProps<'/order/track/[
         </CardHeader>
         <CardContent className="space-y-4">
           <OrderItemList items={items} />
-          <OrderTotals order={order} />
+          <OrderTotals order={order} showTax={false} />
         </CardContent>
       </Card>
     </div>
