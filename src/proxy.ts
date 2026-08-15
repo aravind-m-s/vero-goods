@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ADMIN_COOKIE_NAME, verifySessionValue } from '@/features/auth/server/session';
+import { applySecurityHeaders } from '@/shared/lib/security-headers';
 
 const NOINDEX = 'noindex, nofollow, noarchive';
 
@@ -20,6 +21,7 @@ export async function proxy(request: NextRequest) {
       loginUrl.searchParams.set('next', pathname);
       const redirect = NextResponse.redirect(loginUrl);
       redirect.headers.set('X-Robots-Tag', NOINDEX);
+      applySecurityHeaders(redirect.headers);
       return redirect;
     }
   }
@@ -34,12 +36,8 @@ export async function proxy(request: NextRequest) {
     response.headers.set('X-Robots-Tag', NOINDEX);
   }
 
-  // Baseline hardening headers. A storefront handling addresses and payments
-  // should not be framable or sniffable.
-  response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'DENY');
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  // Baseline hardening: CSP, HSTS, and the older single-purpose headers.
+  applySecurityHeaders(response.headers);
 
   return response;
 }

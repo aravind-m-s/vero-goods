@@ -187,6 +187,15 @@ export async function ensureIndexes(): Promise<void> {
 
         db.collection('webhookEvents').createIndex({ eventId: 1 }, { unique: true }),
         db.collection('webhookEvents').createIndex({ receivedAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 }),
+
+        // Unmatched payments. Deliberately no TTL: money that arrived without a
+        // home is not something to quietly expire after thirty days.
+        db.collection('paymentAlerts').createIndex({ id: 1 }, { unique: true }),
+        db.collection('paymentAlerts').createIndex(
+          { razorpayOrderId: 1, kind: 1 },
+          { unique: true }
+        ),
+        db.collection('paymentAlerts').createIndex({ resolvedAt: 1, lastSeenAt: -1 }),
       ]);
     })().catch((err) => {
       // Let the next call retry rather than caching a rejected promise forever.
