@@ -58,6 +58,8 @@ export interface QuoteTotals {
   subtotalMinor: number;
   shippingMinor: number;
   codFeeMinor: number;
+  /** What COD would cost, whether or not it is the selected method. */
+  codFeeIfSelectedMinor: number;
   taxMinor: number;
   taxLines: Array<{ ratePercent: number; taxableMinor: number; taxMinor: number }>;
   totalMinor: number;
@@ -98,6 +100,7 @@ const EMPTY_TOTALS: QuoteTotals = {
   subtotalMinor: 0,
   shippingMinor: 0,
   codFeeMinor: 0,
+  codFeeIfSelectedMinor: 0,
   taxMinor: 0,
   taxLines: [],
   totalMinor: 0,
