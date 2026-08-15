@@ -66,8 +66,6 @@ export function Footer() {
             <FooterColumn
               title="Policies"
               links={[
-                { href: '/#shipping', label: 'Shipping' },
-                { href: '/#returns', label: 'Returns' },
                 { href: '/privacy', label: 'Privacy policy' },
                 { href: '/terms', label: 'Terms & conditions' },
               ]}

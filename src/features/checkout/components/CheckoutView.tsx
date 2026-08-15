@@ -580,7 +580,7 @@ export function CheckoutView() {
               </CardHeader>
               <CardContent className="space-y-2.5">
                 <PaymentOption
-                  {...register('paymentMethod')}
+                {...register('paymentMethod')}
                   value="RAZORPAY"
                   checked={paymentMethod === 'RAZORPAY'}
                   icon={<Landmark className="h-4 w-4" />}
