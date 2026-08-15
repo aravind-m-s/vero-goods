@@ -9,7 +9,7 @@ import {
   reserveStock,
 } from '@/features/orders/server/orders.repo';
 import { getVariantsByIds } from '@/features/catalog/server/products.repo';
-import { productsCollection, stripIds } from '@/shared/db/collections';
+import { productImagesCollection, productsCollection, stripIds } from '@/shared/db/collections';
 import { updateCustomerContact } from '@/features/auth/server/users.repo';
 import { CURRENCY } from '@/features/catalog/types';
 import { OrderStatus, PaymentStatus, type Order, type OrderItem } from '@/features/orders/types';
@@ -78,10 +78,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'One or more items are no longer available' }, { status: 409 });
   }
 
-  const productsCol = await productsCollection();
-  const products = stripIds(
-    await productsCol.find({ id: { $in: [...new Set(variants.map((v) => v.productId))] } }).toArray()
-  );
+  const productIds = [...new Set(variants.map((v) => v.productId))];
+  const [productsCol, imagesCol] = await Promise.all([
+    productsCollection(),
+    productImagesCollection(),
+  ]);
+  const [products, images] = await Promise.all([
+    productsCol.find({ id: { $in: productIds } }).toArray().then(stripIds),
+    // The first image of each product, to be frozen onto the order line below.
+    imagesCol.find({ productId: { $in: productIds }, sortOrder: 0 }).toArray().then(stripIds),
+  ]);
 
   const items: OrderItem[] = [];
   const orderId = randomId('ord');
@@ -121,6 +127,7 @@ export async function POST(request: NextRequest) {
       productTitle: product.title,
       variantName: variant.name,
       sku: variant.sku,
+      imageUrl: images.find((image) => image.productId === product.id)?.url,
       unitPriceMinor: variant.priceMinor,
       quantity: line.quantity,
       totalMinor: variant.priceMinor * line.quantity,

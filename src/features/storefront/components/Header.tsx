@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { LogOut, Menu, ShoppingBag, User, X } from 'lucide-react';
 import { CartDrawer } from '@/features/cart/components/CartDrawer';
-import { useCart } from '@/features/cart/components/CartContext';
+import { useCartCount, useIsCartHydrated } from '@/features/cart/store/cart.store';
 import { Button } from '@/shared/ui/button';
 import { ThemeToggle } from '@/shared/ui/theme-toggle';
 import { cn } from '@/shared/lib/utils';
@@ -15,7 +15,8 @@ const NAV = [
 ];
 
 export function Header() {
-  const { cartCount, isHydrated } = useCart();
+  const cartCount = useCartCount();
+  const isHydrated = useIsCartHydrated();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [customer, setCustomer] = useState<{ name: string } | null>(null);

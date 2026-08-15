@@ -4,6 +4,7 @@ import {
   nextSequence,
   orderItemsCollection,
   ordersCollection,
+  productImagesCollection,
   stripId,
   stripIds,
   variantsCollection,
@@ -26,8 +27,29 @@ export async function getOrderByRazorpayOrderId(razorpayOrderId: string): Promis
 }
 
 export async function getOrderItems(orderId: string): Promise<OrderItem[]> {
-  const items = await orderItemsCollection();
-  return stripIds(await items.find({ orderId }).toArray());
+  const itemsCol = await orderItemsCollection();
+  const items = stripIds(await itemsCol.find({ orderId }).toArray());
+
+  // Orders placed before the line image was snapshotted have none stored, and
+  // rendered a grey placeholder forever. Fall back to the product's current
+  // image for those — the snapshot on newer orders is still preferred, so a
+  // product changing its photo does not rewrite the picture on an old receipt.
+  const missing = items.filter((item) => !item.imageUrl);
+  if (missing.length === 0) return items;
+
+  const imagesCol = await productImagesCollection();
+  const images = stripIds(
+    await imagesCol
+      .find({ productId: { $in: [...new Set(missing.map((item) => item.productId))] }, sortOrder: 0 })
+      .toArray()
+  );
+  if (images.length === 0) return items;
+
+  return items.map((item) =>
+    item.imageUrl
+      ? item
+      : { ...item, imageUrl: images.find((image) => image.productId === item.productId)?.url }
+  );
 }
 
 export async function findOrderByIdempotencyKey(

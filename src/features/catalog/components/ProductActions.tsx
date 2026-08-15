@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, HandHeart, Minus, PackageX, Plus, ShieldCheck, ShoppingCart, Truck, Zap } from 'lucide-react';
 import { trackCartAdd } from '@/features/analytics/lib/beacon';
-import { useCart } from '@/features/cart/components/CartContext';
+import { useCartStore, useDirectBuyStore } from '@/features/cart/store/cart.store';
 import { ProductMedia } from '@/features/catalog/components/ProductMedia';
 import { GetItForMeDialog } from '@/features/requests/components/GetItForMeDialog';
 import type { ProductImage, ProductVariant, ProductVideo } from '@/features/catalog/types';
@@ -32,7 +32,10 @@ export function ProductActions({
   variants,
 }: ProductActionsProps) {
   const router = useRouter();
-  const { addToCart, startDirectBuy } = useCart();
+  // Actions are stable store references, so this component never re-renders
+  // because something elsewhere changed the cart.
+  const addToCart = useCartStore((state) => state.addToCart);
+  const startDirectBuy = useDirectBuyStore((state) => state.start);
   const { success, error } = useToast();
 
   const sellable = useMemo(() => variants.filter((variant) => variant.isActive), [variants]);

@@ -5,7 +5,7 @@ import { BadgeIndianRupee, Headphones, RotateCcw, Truck } from 'lucide-react';
 const GUARANTEES = [
   { icon: Truck, title: 'Fast dispatch', body: 'Dispatched within 1–4 working days.' },
   { icon: BadgeIndianRupee, title: 'COD available', body: 'Pay cash when your order arrives.' },
-  { icon: RotateCcw, title: '2 days replacement', body: 'Unboxing video required.' },
+  { icon: RotateCcw, title: '24 hours replacement', body: 'Unboxing video required.' },
   { icon: Headphones, title: 'Dedicated customer support', body: 'Fast response & hassle-free assistance.' },
 ];
 
@@ -68,6 +68,8 @@ export function Footer() {
               links={[
                 { href: '/#shipping', label: 'Shipping' },
                 { href: '/#returns', label: 'Returns' },
+                { href: '/privacy', label: 'Privacy policy' },
+                { href: '/terms', label: 'Terms & conditions' },
               ]}
             />
           </div>
@@ -76,7 +78,7 @@ export function Footer() {
         <div className="border-t border-band-line">
           <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-2xs opacity-50 sm:flex-row sm:px-6 lg:px-8">
             <p>&copy; {new Date().getFullYear()} Vero Goods. All rights reserved.</p>
-            <p>Delivery within India only.</p>
+            <p>All India Delivery.</p>
           </div>
         </div>
       </div>

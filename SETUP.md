@@ -161,7 +161,7 @@ src/
     (store)/  admin/  api/
   features/
     catalog/    types.ts schemas.ts server/products.repo.ts components/
-    cart/       components/CartContext.tsx CartDrawer.tsx
+    cart/       store/cart.store.ts components/{CartDrawer,CartEffects}.tsx
     checkout/   schemas.ts server/pricing.ts components/CheckoutView.tsx
     orders/     types.ts schemas.ts server/orders.repo.ts components/
     payments/   schemas.ts server/razorpay.ts
