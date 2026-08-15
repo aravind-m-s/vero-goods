@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { ArrowLeft, AtSign, Loader2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
@@ -311,6 +312,20 @@ export function AuthView({
           )}
         </CardContent>
       </Card>
+
+      {/* Outside the card so it covers every way off this screen — the code
+          form and the Google button as much as the email one. */}
+      <p className="mt-4 text-center text-3xs leading-relaxed text-ink-subtle">
+        By signing in you accept our{' '}
+        <Link href="/terms" className="font-semibold text-ink-muted underline hover:text-accent">
+          Terms &amp; conditions
+        </Link>{' '}
+        and{' '}
+        <Link href="/privacy" className="font-semibold text-ink-muted underline hover:text-accent">
+          Privacy policy
+        </Link>
+        .
+      </p>
     </div>
   );
 }

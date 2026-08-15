@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { unstable_cache, revalidateTag } from 'next/cache';
+import { unstable_cache, revalidatePath, revalidateTag } from 'next/cache';
 import {
   orderItemsCollection,
   priceHistoryCollection,
@@ -22,6 +22,14 @@ export const PRODUCTS_TAG = 'products';
 export function revalidateCatalogue(): void {
   // 'max' keeps serving the previous page while the fresh one is generated.
   revalidateTag(PRODUCTS_TAG, 'max');
+
+  // `revalidateTag` only marks the *data* caches stale. The storefront routes
+  // are prerendered, and their route cache entries survive it — which is how a
+  // saved product could sit in the database while the page kept serving the
+  // HTML from before the edit. The two are complementary, not alternatives.
+  // See node_modules/next/dist/docs/01-app/03-api-reference/04-functions/revalidatePath.md
+  revalidatePath('/');
+  revalidatePath('/products/[slug]', 'page');
 }
 
 export interface ProductWithDetail {

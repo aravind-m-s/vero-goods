@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,7 +24,6 @@ import {
   useCheckoutLines,
   useCheckoutTotals,
   useIsCartHydrated,
-  useIsCheckoutPricing,
   useIsDirectBuy,
 } from '@/features/cart/store/cart.store';
 import { AuthView } from '@/features/auth/components/AuthView';
@@ -75,7 +74,6 @@ export function CheckoutView() {
   const lines = useCheckoutLines();
   const totals = useCheckoutTotals();
   const cartCount = useCheckoutCount();
-  const isPricing = useIsCheckoutPricing();
   const isDirectBuy = useIsDirectBuy();
   const isHydrated = useIsCartHydrated();
   const { success: showSuccess, error: showError } = useToast();
@@ -115,6 +113,34 @@ export function CheckoutView() {
 
   const paymentMethod = watch('paymentMethod');
   const selectedAddress = savedAddresses.find((item) => item.id === selectedAddressId) ?? null;
+  const addressCardRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * The pay button stays live without an address.
+   *
+   * A disabled button explains nothing: a first-time visitor with an empty
+   * cart-to-order path saw a dead control and no reason for it. Pressing it now
+   * says what is missing, opens the address form when there is nothing to pick,
+   * and scrolls to it — which on a phone is the difference between the problem
+   * being on screen and being three scrolls above it.
+   */
+  const requireAddress = (): boolean => {
+    if (selectedAddress) return true;
+
+    if (savedAddresses.length === 0) setIsAddingAddress(true);
+    showError(
+      savedAddresses.length === 0
+        ? 'Add a delivery address to place your order'
+        : 'Choose a delivery address to place your order'
+    );
+    addressCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return false;
+  };
+
+  const handlePayClick = () => {
+    if (!requireAddress()) return;
+    void handleSubmit(onSubmit)();
+  };
 
   // COD carries a handling fee, so the server quote is refreshed whenever the
   // payment method changes — and only then. `refreshQuote` is a module-level
@@ -122,6 +148,29 @@ export function CheckoutView() {
   useEffect(() => {
     if (paymentMethod) void refreshQuote(paymentMethod);
   }, [paymentMethod]);
+
+  /**
+   * Totals to show while that refresh is still in the air.
+   *
+   * Switching to COD changes exactly one number, and the last quote already
+   * carries it: `codFeeIfSelectedMinor` exists so the COD option can be labelled
+   * before anyone picks it. Applying it here means the summary and the button
+   * move the instant the radio does, instead of sitting on a spinner for a
+   * round-trip that will return this same figure. The server quote remains
+   * authoritative — it lands a moment later and overwrites this — and the order
+   * API re-prices from the database regardless of what was on screen.
+   */
+  const displayTotals = useMemo(() => {
+    const codFeeMinor = paymentMethod === 'COD' ? totals.codFeeIfSelectedMinor : 0;
+    if (codFeeMinor === totals.codFeeMinor) return totals;
+    return {
+      ...totals,
+      codFeeMinor,
+      // Mirrors `calculateTotals`: the COD fee is added to the total and, unlike
+      // shipping, is not part of the inclusive-GST split.
+      totalMinor: totals.subtotalMinor + totals.shippingMinor + codFeeMinor,
+    };
+  }, [totals, paymentMethod]);
 
   /** Stored numbers carry the country code; the order API wants the 10 local digits. */
   const toLocalPhone = (phone?: string) => (phone ? phone.replace(/\D/g, '').slice(-10) : '');
@@ -274,10 +323,9 @@ export function CheckoutView() {
       showError('Your cart is empty');
       return;
     }
-    if (!selectedAddress) {
-      showError('Choose a delivery address first');
-      return;
-    }
+    // Also checked on the click, before validation; this covers the paths that
+    // reach the submit handler another way.
+    if (!requireAddress() || !selectedAddress) return;
     setIsPlacingOrder(true);
 
     try {
@@ -428,7 +476,7 @@ export function CheckoutView() {
         // address, and forms cannot nest.
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
           <div className="space-y-6 lg:col-span-7">
-            <Card>
+            <Card ref={addressCardRef}>
               <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
                 <div className="min-w-0">
                   <CardTitle className="flex items-center gap-2 text-sm">
@@ -593,18 +641,25 @@ export function CheckoutView() {
                 <Separator />
 
                 <dl className="space-y-1.5 text-xs">
-                  <SummaryRow label="Subtotal" value={formatMinor(totals.subtotalMinor)} />
+                  <SummaryRow label="Subtotal" value={formatMinor(displayTotals.subtotalMinor)} />
                   <SummaryRow
                     label="Shipping"
-                    value={totals.shippingMinor === 0 ? 'Free' : formatMinor(totals.shippingMinor)}
+                    value={
+                      displayTotals.shippingMinor === 0
+                        ? 'Free'
+                        : formatMinor(displayTotals.shippingMinor)
+                    }
                   />
-                  {totals.codFeeMinor > 0 && (
-                    <SummaryRow label="COD handling fee" value={formatMinor(totals.codFeeMinor)} />
+                  {displayTotals.codFeeMinor > 0 && (
+                    <SummaryRow
+                      label="COD handling fee"
+                      value={formatMinor(displayTotals.codFeeMinor)}
+                    />
                   )}
                   <Separator className="my-2" />
                   <div className="flex justify-between text-lg font-bold text-ink">
                     <dt>Total</dt>
-                    <dd className="tabular-nums">{formatMinor(totals.totalMinor)}</dd>
+                    <dd className="tabular-nums">{formatMinor(displayTotals.totalMinor)}</dd>
                   </div>
                 </dl>
 
@@ -613,13 +668,13 @@ export function CheckoutView() {
                   variant="accent"
                   size="lg"
                   className="w-full"
-                  onClick={handleSubmit(onSubmit)}
-                  isLoading={isPlacingOrder || isPricing}
-                  disabled={lines.length === 0 || !selectedAddress}
+                  onClick={handlePayClick}
+                  isLoading={isPlacingOrder}
+                  disabled={lines.length === 0}
                 >
                   {paymentMethod === 'COD'
-                    ? `Place order · ${formatMinor(totals.totalMinor)}`
-                    : `Pay ${formatMinor(totals.totalMinor)}`}
+                    ? `Place order · ${formatMinor(displayTotals.totalMinor)}`
+                    : `Pay ${formatMinor(displayTotals.totalMinor)}`}
                 </Button>
                 {!selectedAddress && (
                   <p className="text-center text-2xs text-ink-subtle">
