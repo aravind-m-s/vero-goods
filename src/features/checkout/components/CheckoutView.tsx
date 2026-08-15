@@ -539,7 +539,17 @@ export function CheckoutView() {
                   checked={paymentMethod === 'COD'}
                   icon={<Banknote className="h-4 w-4" />}
                   title="Cash on delivery"
-                  subtitle={`${formatMinor(totals.codFeeMinor || 18)} handling fee applies`}
+                  // Reads the configured fee rather than the one applied to this
+                  // basket: the latter is zero until COD is actually selected,
+                  // so the label has to describe the option, not the current total.
+                  // Falls back to a statement with no number in it, because the
+                  // placeholder totals are zero until the first quote returns
+                  // and "no handling fee" would be a claim rather than a blank.
+                  subtitle={
+                    totals.codFeeIfSelectedMinor > 0
+                      ? `${formatMinor(totals.codFeeIfSelectedMinor)} handling fee applies`
+                      : 'Pay in cash when it arrives'
+                  }
                 />
                 {errors.paymentMethod && <AuthError message={errors.paymentMethod.message ?? ''} />}
               </CardContent>

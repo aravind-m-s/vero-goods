@@ -33,7 +33,16 @@ export interface PricedLine {
 export interface OrderTotals {
   subtotalMinor: number;
   shippingMinor: number;
+  /** Charged on this basket — zero unless COD is the selected method. */
   codFeeMinor: number;
+  /**
+   * What COD would cost, whatever is selected right now.
+   *
+   * The checkout has to label the COD option before anyone picks it, and
+   * `codFeeMinor` is zero until they do. Without this the label had nothing
+   * truthful to show and fell back to a hardcoded number.
+   */
+  codFeeIfSelectedMinor: number;
   taxMinor: number;
   taxLines: TaxLine[];
   totalMinor: number;
@@ -75,6 +84,7 @@ export function calculateTotals(
     subtotalMinor,
     shippingMinor,
     codFeeMinor,
+    codFeeIfSelectedMinor: COD_FEE_MINOR(),
     taxMinor: taxLines.reduce((sum, line) => sum + line.taxMinor, 0),
     taxLines,
     totalMinor: subtotalMinor + shippingMinor + codFeeMinor,
