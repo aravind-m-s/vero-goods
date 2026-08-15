@@ -4,6 +4,7 @@ import '@/shared/styles/globals.css';
 import { appUrl } from '@/shared/lib/config';
 import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { THEME_INIT_SCRIPT } from '@/shared/theme/theme';
+import Clarity from '@/shared/ui/clarity';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -79,6 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="flex min-h-full flex-col bg-surface-sunken text-ink">
         <ThemeProvider>{children}</ThemeProvider>
+        <Clarity />
       </body>
     </html>
   );
