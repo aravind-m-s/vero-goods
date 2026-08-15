@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { getSessionCustomer } from '@/features/auth/server/auth';
 import {
   OutOfStockError,
@@ -15,6 +15,8 @@ import { CURRENCY } from '@/features/catalog/types';
 import { OrderStatus, PaymentStatus, type Order, type OrderItem } from '@/features/orders/types';
 import { sendEmail } from '@/shared/email/send';
 import { orderReceivedEmail } from '@/shared/email/templates';
+import { sendDiscord } from '@/shared/discord/send';
+import { orderPlacedDiscord } from '@/shared/discord/templates';
 import { COD_MAX_ORDER_MINOR, calculateTotals, estimateDeliveryDate } from '@/features/checkout/server/pricing';
 import { formatMinor } from '@/shared/lib/money';
 import { clientIp, rateLimit } from '@/shared/lib/rate-limit';
@@ -218,8 +220,19 @@ export async function POST(request: NextRequest) {
 
     // COD gets its receipt now; online orders get theirs once payment settles.
     // Neither is "confirmed" — an admin does that from the orders screen.
+    //
+    // The admin ping follows the same rule. A RAZORPAY order at this point is
+    // only an intent — the shopper has not reached the payment sheet yet, and
+    // pinging here would fill the channel with baskets that were abandoned one
+    // screen later. It fires from the settle path instead.
+    //
+    // `after` runs it once the response has been flushed, so the shopper's
+    // confirmation screen never waits on Discord or Gmail.
     if (order.paymentMethod === 'COD') {
-      await sendEmail(orderReceivedEmail(order, items));
+      after(async () => {
+        await sendEmail(orderReceivedEmail(order, items));
+        await sendDiscord(orderPlacedDiscord(order, items));
+      });
     }
 
     return NextResponse.json({
