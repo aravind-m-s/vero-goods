@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { BadgeCheck, KeyRound, Mail, Save, ShieldCheck, Smartphone } from 'lucide-react';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
@@ -22,6 +23,7 @@ type Channel = 'email' | 'phone';
  */
 export function ProfileView({ initial }: { initial: PublicUser }) {
   const { success, error } = useToast();
+  const router = useRouter();
   const [user, setUser] = useState(initial);
 
   const [name, setName] = useState(initial.name);
@@ -50,6 +52,10 @@ export function ProfileView({ initial }: { initial: PublicUser }) {
       }
       setUser(data.user);
       success('Name updated');
+      // The name is on the account header and the overview's profile card too,
+      // both server-rendered — drop the router's copy of them so they do not
+      // come back stale on the next navigation.
+      router.refresh();
     } catch {
       error('Could not reach the server');
     } finally {
@@ -113,6 +119,7 @@ export function ProfileView({ initial }: { initial: PublicUser }) {
       setCodeSent(false);
       setCode('');
       success(pending === 'email' ? 'Email address updated' : 'Mobile number updated');
+      router.refresh();
     } catch {
       error('Could not reach the server');
     } finally {

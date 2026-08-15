@@ -191,6 +191,9 @@ export function CheckoutView() {
   const goToSuccess = (trackingToken: string, orderNumber: string) => {
     clearPurchased();
     router.push(`/order/success?token=${trackingToken}&orderNumber=${orderNumber}`);
+    // The order history and the overview's order card are server-rendered and
+    // the router may still be holding a copy from before this order existed.
+    router.refresh();
   };
 
   const verifyPayment = async (session: RazorpaySession, response: Record<string, string>) => {

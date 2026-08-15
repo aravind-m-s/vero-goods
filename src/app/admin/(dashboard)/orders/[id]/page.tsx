@@ -232,14 +232,14 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             </CardHeader>
             <CardContent>
               <ol className="space-y-2 text-xs">
-                {[...order.statusHistory].reverse().map((event, index) => (
-                  <li key={`${event.status}-${index}`} className="flex justify-between gap-3">
+                {historyRows(order.statusHistory).map((row, index) => (
+                  <li key={`${row.event.at}-${index}`} className="flex justify-between gap-3">
                     <span>
-                      <span className="font-semibold">{event.status.replace(/_/g, ' ')}</span>
-                      {event.note && <span className="text-ink-subtle"> — {event.note}</span>}
+                      <span className="font-semibold">{row.title}</span>
+                      {row.detail && <span className="text-ink-subtle"> — {row.detail}</span>}
                     </span>
                     <span className="shrink-0 text-ink-subtle">
-                      {new Date(event.at).toLocaleString('en-IN')} · {event.by}
+                      {new Date(row.event.at).toLocaleString('en-IN')} · {row.event.by}
                     </span>
                   </li>
                 ))}
@@ -394,6 +394,31 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       </div>
     </div>
   );
+}
+
+/**
+ * Turns the raw history into rows, newest first.
+ *
+ * Not every entry is a fulfilment step. A payment is recorded against the
+ * status the order is already in — deliberately, so settling money never reads
+ * as the store having moved the order along — and the same is true of a failed
+ * payment. Printing `event.status` as the headline made those entries repeat
+ * the status above them, so a prepaid order showed "PLACED" twice and looked
+ * like it had been recorded two times.
+ *
+ * An entry that does not change the status is therefore titled by its note:
+ * "Payment pay_x verified" is what happened, PLACED is merely where the order
+ * still was when it happened.
+ */
+function historyRows(history: Order['statusHistory']) {
+  return history
+    .map((event, index) => {
+      const isStatusChange = index === 0 || event.status !== history[index - 1].status;
+      return isStatusChange
+        ? { event, title: event.status.replace(/_/g, ' '), detail: event.note }
+        : { event, title: event.note ?? 'Updated', detail: undefined };
+    })
+    .reverse();
 }
 
 function Row({ label, value }: { label: string; value: string }) {
