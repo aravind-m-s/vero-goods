@@ -3,6 +3,7 @@ import 'server-only';
 import { unstable_cache, revalidateTag } from 'next/cache';
 import {
   orderItemsCollection,
+  priceHistoryCollection,
   productImagesCollection,
   productVideosCollection,
   productsCollection,
@@ -12,6 +13,7 @@ import {
   variantsCollection,
 } from '@/shared/db/collections';
 import { ensureSeeded } from '@/shared/db/seed';
+import type { PriceChange } from '@/features/analytics/types';
 import type { Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant, ProductVideo } from '@/features/catalog/types';
 
 export const PRODUCTS_TAG = 'products';
@@ -277,8 +279,31 @@ async function writeChildren(productId: string, input: ProductWriteInput): Promi
   const keptVariantIds = input.variants.filter((v) => v.id).map((v) => v.id as string);
   await variantsCol.deleteMany({ productId, id: { $nin: keptVariantIds } });
 
+  // Read the prices before they are overwritten. Without this record, a report
+  // comparing this month against last month silently compares two different
+  // prices, and "did raising it cost me sales?" has no answer at all.
+  const previousPrices = new Map(
+    (
+      await variantsCol
+        .find({ productId }, { projection: { id: 1, priceMinor: 1 } })
+        .toArray()
+    ).map((variant) => [variant.id as string, variant.priceMinor as number])
+  );
+  const priceChanges: PriceChange[] = [];
+
   for (const [index, variant] of input.variants.entries()) {
     const id = variant.id ?? newId('v');
+    const previous = previousPrices.get(id);
+    if (previous !== undefined && previous !== variant.priceMinor) {
+      priceChanges.push({
+        productId,
+        variantId: id,
+        sku: variant.sku,
+        fromMinor: previous,
+        toMinor: variant.priceMinor,
+        at: new Date(),
+      });
+    }
     await variantsCol.updateOne(
       { id },
       {
@@ -299,6 +324,10 @@ async function writeChildren(productId: string, input: ProductWriteInput): Promi
       },
       { upsert: true }
     );
+  }
+
+  if (priceChanges.length > 0) {
+    await (await priceHistoryCollection()).insertMany(priceChanges);
   }
 
   await imagesCol.deleteMany({ productId });
@@ -418,10 +447,45 @@ export async function setProductActive(id: string, isActive: boolean): Promise<P
  * Products are archived, never hard-deleted: order items reference them for
  * invoices, returns, and accounting long after the product leaves the catalogue.
  */
+/**
+ * Retires a product without deleting it.
+ *
+ * Deliberately does not touch the variants. The storefront filters on the
+ * product's own `isActive` at every entry point, so switching them off changed
+ * nothing a shopper could see — but it did overwrite which variants the admin
+ * had intentionally disabled, and unarchiving never put them back. A product
+ * restored from the archive came back live with nothing sellable on it.
+ */
 export async function archiveProduct(id: string): Promise<Product | null> {
-  const variants = await variantsCollection();
-  await variants.updateMany({ productId: id }, { $set: { isActive: false } });
-  return setProductActive(id, false);
+  return setArchived(id, true);
+}
+
+/**
+ * Brings a product back, as hidden rather than live.
+ *
+ * Publishing is left as its own deliberate step: restoring something retired
+ * months ago straight onto the storefront, at whatever price it carried then,
+ * is not a decision this button should make for you.
+ */
+export async function unarchiveProduct(id: string): Promise<Product | null> {
+  return setArchived(id, false);
+}
+
+async function setArchived(id: string, archived: boolean): Promise<Product | null> {
+  const products = await productsCollection();
+  const now = new Date().toISOString();
+
+  const result = await products.findOneAndUpdate(
+    { id },
+    archived
+      ? { $set: { archivedAt: now, isActive: false, updatedAt: now } }
+      : { $set: { isActive: false, updatedAt: now }, $unset: { archivedAt: '' } },
+    { returnDocument: 'after' }
+  );
+  if (!result) return null;
+
+  revalidateCatalogue();
+  return stripIds([result])[0];
 }
 
 /** How many historical order items still point at this product. */

@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, HandHeart, Minus, PackageX, Plus, ShieldCheck, ShoppingCart, Truck, Zap } from 'lucide-react';
+import { trackCartAdd } from '@/features/analytics/lib/beacon';
 import { useCart } from '@/features/cart/components/CartContext';
 import { ProductMedia } from '@/features/catalog/components/ProductMedia';
 import { GetItForMeDialog } from '@/features/requests/components/GetItForMeDialog';
@@ -73,6 +74,7 @@ export function ProductActions({
       return;
     }
     addToCart(selected.id, quantity);
+    trackCartAdd(productId, selected.id);
     success(
       `${productTitle}${selected.name === 'Default' ? '' : ` · ${selected.name}`} added to cart`
     );
@@ -85,7 +87,11 @@ export function ProductActions({
       error('This option is out of stock');
       return;
     }
+    // Skipping the cart is a stronger decision, not a different one — counting
+    // it separately would make every product bought this way look like it
+    // converts out of nowhere.
     startDirectBuy(selected.id, quantity);
+    trackCartAdd(productId, selected.id);
     router.push('/checkout');
   };
 

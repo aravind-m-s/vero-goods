@@ -10,6 +10,7 @@ import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
 import { Textarea } from '@/shared/ui/textarea';
 import { useToast } from '@/shared/ui/toast';
+import { MediaUploader } from '@/features/admin/components/MediaUploader';
 import { SpecificationBuilder, type SpecSection } from '@/features/admin/components/SpecificationBuilder';
 import { VariantBuilder, type VariantDraft } from '@/features/admin/components/VariantBuilder';
 import { FORM_ERROR_KEY, ProductFormSchema, issuesToFieldErrors } from '@/features/catalog/schemas';
@@ -111,6 +112,23 @@ export function ProductForm({
   /** First message on `prefix` itself or any path beneath it. */
   const firstErrorFor = (prefix: string) =>
     errorEntries.find(([path]) => path === prefix || path.startsWith(`${prefix}.`))?.[1];
+
+  /**
+   * The uploader and the textarea edit the same list, so an upload appends a
+   * line and discarding one takes that line back out. Keeping the textarea as
+   * the source of truth means a pasted supplier URL and an uploaded file are
+   * the same thing to everything downstream.
+   */
+  const appendUrl = (setText: React.Dispatch<React.SetStateAction<string>>) => (url: string) =>
+    setText((current) => (current.trim() ? `${current.replace(/\n+$/, '')}\n${url}` : url));
+
+  const removeUrl = (setText: React.Dispatch<React.SetStateAction<string>>) => (url: string) =>
+    setText((current) =>
+      current
+        .split('\n')
+        .filter((line) => line.trim() !== url)
+        .join('\n')
+    );
 
   /**
    * Nested fields (variants, suppliers, specification rows) fail far below the
@@ -410,6 +428,11 @@ export function ProductForm({
                     still renders, just unoptimised.
                   </p>
                 )}
+                <MediaUploader
+                  kind="image"
+                  onUploaded={appendUrl(setImagesText)}
+                  onRemoved={removeUrl(setImagesText)}
+                />
               </div>
 
               <div className="space-y-1 border-t border-line pt-3">
@@ -427,6 +450,11 @@ export function ProductForm({
                   YouTube or Vimeo links play as embeds; .mp4 / .webm links play inline. Videos
                   appear after the images in the product gallery.
                 </p>
+                <MediaUploader
+                  kind="video"
+                  onUploaded={appendUrl(setVideosText)}
+                  onRemoved={removeUrl(setVideosText)}
+                />
               </div>
             </CardContent>
           </Card>

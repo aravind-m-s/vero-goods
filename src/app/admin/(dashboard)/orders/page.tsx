@@ -1,10 +1,18 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, Eye, FileDown, Search, X } from 'lucide-react';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/dialog';
 import { Input } from '@/shared/ui/input';
 import { Select } from '@/shared/ui/select';
 import { Skeleton } from '@/shared/ui/skeleton';
@@ -17,10 +25,29 @@ import {
   TableRow,
 } from '@/shared/ui/table';
 import { useToast } from '@/shared/ui/toast';
-import { OrderStatus, PaymentStatus, type Order } from '@/features/orders/types';
+import {
+  ALLOWED_STATUS_TRANSITIONS,
+  OrderStatus,
+  PaymentStatus,
+  type Order,
+} from '@/features/orders/types';
 import { formatMinor } from '@/shared/lib/money';
 
 const PAGE_SIZE = 20;
+
+const COLUMN_COUNT = 8;
+
+/** Prepaid orders confirm only once the money is captured; COD confirms on judgement. */
+function isConfirmable(order: Order): boolean {
+  return (
+    order.orderStatus === OrderStatus.PLACED &&
+    (order.paymentMethod === 'COD' || order.paymentStatus === PaymentStatus.PAID)
+  );
+}
+
+function readableStatus(status: OrderStatus): string {
+  return status.replace(/_/g, ' ');
+}
 
 const STATUS_VARIANT: Record<OrderStatus, 'default' | 'info' | 'warning' | 'success' | 'danger'> = {
   [OrderStatus.PLACED]: 'warning',
@@ -53,6 +80,11 @@ export default function AdminOrdersPage() {
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkTarget, setBulkTarget] = useState('');
+  const [pendingBulk, setPendingBulk] = useState<OrderStatus | null>(null);
+  const [isBulkRunning, setIsBulkRunning] = useState(false);
 
   const buildQuery = useCallback(
     (targetPage: number) => {
@@ -88,6 +120,9 @@ export default function AdminOrdersPage() {
         if (cancelled) return;
         setOrders(data.orders);
         setTotal(data.total);
+        // Ids from the previous result set are meaningless against these rows,
+        // and a selection the admin can no longer see must not stay armed.
+        setSelectedIds(new Set());
       } catch {
         if (!cancelled) error('Network error loading orders');
       } finally {
@@ -135,6 +170,109 @@ export default function AdminOrdersPage() {
       error('Network error');
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  const toggleOne = (id: string) =>
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelectedIds((current) =>
+      current.size === orders.length ? new Set() : new Set(orders.map((order) => order.id))
+    );
+
+  const selectedOrders = useMemo(
+    () => orders.filter((order) => selectedIds.has(order.id)),
+    [orders, selectedIds]
+  );
+
+  /**
+   * Only statuses every selected order can legally reach.
+   *
+   * Offering a status that half the selection would reject turns a bulk action
+   * into a guessing game — the server would refuse those rows anyway, so the
+   * mixed-selection case is settled here rather than in an error toast.
+   */
+  const availableTargets = useMemo(() => {
+    if (selectedOrders.length === 0) return [] as OrderStatus[];
+    return Object.values(OrderStatus).filter((target) =>
+      selectedOrders.every((order) =>
+        ALLOWED_STATUS_TRANSITIONS[order.orderStatus].includes(target)
+      )
+    );
+  }, [selectedOrders]);
+
+  const confirmable = useMemo(() => selectedOrders.filter(isConfirmable), [selectedOrders]);
+
+  // The chosen target stops being valid as soon as the selection changes shape.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBulkTarget((current) =>
+      current && availableTargets.includes(current as OrderStatus) ? current : ''
+    );
+  }, [availableTargets]);
+
+  /**
+   * Partial success is expected, so the result is reported per order rather
+   * than as one pass/fail: the rows that moved are patched from the server's
+   * copy (a COD delivery also flips its payment status), and the rest are named
+   * with the reason the server gave.
+   */
+  const runBulk = async (status: OrderStatus, ids: string[]) => {
+    setIsBulkRunning(true);
+    try {
+      const response = await fetch('/api/admin/orders/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderIds: ids, status }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        updated?: Order[];
+        failed?: Array<{ id: string; message: string }>;
+        summary?: { requested: number; updated: number; failed: number };
+      };
+      if (!response.ok || !data.updated || !data.summary) {
+        error(data.error ?? 'Could not apply the status change');
+        return;
+      }
+
+      const byId = new Map(data.updated.map((order) => [order.id, order]));
+      setOrders((prev) => prev.map((order) => byId.get(order.id) ?? order));
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        for (const id of byId.keys()) next.delete(id);
+        return next;
+      });
+
+      if (data.summary.updated > 0) {
+        success(
+          `${data.summary.updated} order${data.summary.updated === 1 ? '' : 's'} moved to ` +
+            `${readableStatus(status)} — customers emailed`
+        );
+      }
+
+      const failures = data.failed ?? [];
+      if (failures.length > 0) {
+        const numbers = failures
+          .map((failure) => orders.find((order) => order.id === failure.id)?.orderNumber)
+          .filter(Boolean)
+          .slice(0, 3)
+          .join(', ');
+        error(
+          `${failures.length} unchanged${numbers ? ` (${numbers}${failures.length > 3 ? '…' : ''})` : ''}: ${failures[0].message}`
+        );
+      }
+    } catch {
+      error('Network error applying the status change');
+    } finally {
+      setIsBulkRunning(false);
+      setPendingBulk(null);
     }
   };
 
@@ -222,10 +360,87 @@ export default function AdminOrdersPage() {
         </button>
       )}
 
+      {selectedIds.size > 0 && (
+        // sticky: with twenty rows the selection is made at the bottom of the
+        // table and the action would otherwise be scrolled off the top.
+        <div className="sticky top-4 z-20 flex flex-wrap items-center gap-3 rounded-card border border-ink bg-surface-raised p-3 shadow-card">
+          <p className="text-xs font-bold text-ink">
+            {selectedIds.size} selected
+            {selectedIds.size === orders.length && orders.length > 0 && ' (whole page)'}
+          </p>
+
+          <Button
+            size="sm"
+            className="gap-1.5"
+            disabled={confirmable.length === 0 || isBulkRunning}
+            onClick={() => setPendingBulk(OrderStatus.CONFIRMED)}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Confirm {confirmable.length > 0 && `(${confirmable.length})`}
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <Select
+              value={bulkTarget}
+              onChange={(event) => setBulkTarget(event.target.value)}
+              disabled={availableTargets.length === 0 || isBulkRunning}
+              className="h-9 text-xs"
+              aria-label="Bulk status change"
+            >
+              <option value="">Change status to…</option>
+              {availableTargets.map((status) => (
+                <option key={status} value={status}>
+                  {readableStatus(status)}
+                </option>
+              ))}
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!bulkTarget || isBulkRunning}
+              onClick={() => setPendingBulk(bulkTarget as OrderStatus)}
+            >
+              Apply
+            </Button>
+          </div>
+
+          {availableTargets.length === 0 && (
+            <p className="text-2xs text-ink-subtle">
+              No single status is valid for every selected order.
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="ml-auto flex items-center gap-1 text-xs text-ink-subtle underline"
+          >
+            <X className="h-3 w-3" /> Clear selection
+          </button>
+        </div>
+      )}
+
       <div className="rounded-card border border-line">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-line-strong accent-accent"
+                  aria-label="Select every order on this page"
+                  checked={orders.length > 0 && selectedIds.size === orders.length}
+                  ref={(node) => {
+                    // Some-but-not-all reads as a third state, not as "off".
+                    if (node) {
+                      node.indeterminate =
+                        selectedIds.size > 0 && selectedIds.size < orders.length;
+                    }
+                  }}
+                  disabled={orders.length === 0}
+                  onChange={toggleAll}
+                />
+              </TableHead>
               <TableHead>Order</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Placed</TableHead>
@@ -239,20 +454,29 @@ export default function AdminOrdersPage() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, index) => (
                 <TableRow key={index}>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={COLUMN_COUNT}>
                     <Skeleton className="h-8 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : orders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-xs text-ink-subtle">
+                <TableCell colSpan={COLUMN_COUNT} className="py-10 text-center text-xs text-ink-subtle">
                   No orders match your filters.
                 </TableCell>
               </TableRow>
             ) : (
               orders.map((order) => (
-                <TableRow key={order.id}>
+                <TableRow key={order.id} data-selected={selectedIds.has(order.id) || undefined}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-line-strong accent-accent"
+                      aria-label={`Select order ${order.orderNumber}`}
+                      checked={selectedIds.has(order.id)}
+                      onChange={() => toggleOne(order.id)}
+                    />
+                  </TableCell>
                   <TableCell className="font-mono text-xs font-bold">#{order.orderNumber}</TableCell>
                   <TableCell>
                     <p className="text-xs font-semibold">{order.customerName}</p>
@@ -271,14 +495,12 @@ export default function AdminOrdersPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[order.orderStatus]}>
-                      {order.orderStatus.replace(/_/g, ' ')}
+                      {readableStatus(order.orderStatus)}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
-                      {order.orderStatus === OrderStatus.PLACED &&
-                        (order.paymentMethod === 'COD' ||
-                          order.paymentStatus === PaymentStatus.PAID) && (
+                      {isConfirmable(order) && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -333,6 +555,109 @@ export default function AdminOrdersPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={pendingBulk !== null} onClose={() => !isBulkRunning && setPendingBulk(null)}>
+        {pendingBulk && (
+          <BulkConfirmDialog
+            status={pendingBulk}
+            orders={pendingBulk === OrderStatus.CONFIRMED ? confirmable : selectedOrders}
+            skipped={
+              pendingBulk === OrderStatus.CONFIRMED ? selectedOrders.length - confirmable.length : 0
+            }
+            isRunning={isBulkRunning}
+            onCancel={() => setPendingBulk(null)}
+            onApply={(ids) => runBulk(pendingBulk, ids)}
+          />
+        )}
+      </Dialog>
     </div>
+  );
+}
+
+/**
+ * The stop before a bulk write.
+ *
+ * It names the orders rather than only counting them: "18 orders" is not
+ * something an admin can check, and the whole point of the pause is that a
+ * mis-click on the select-all box is caught here rather than in the customers'
+ * inboxes. Cancelling gets an extra warning because it restocks and starts
+ * refunds, neither of which the undo button can take back — there is no undo.
+ */
+function BulkConfirmDialog({
+  status,
+  orders,
+  skipped,
+  isRunning,
+  onCancel,
+  onApply,
+}: {
+  status: OrderStatus;
+  orders: Order[];
+  skipped: number;
+  isRunning: boolean;
+  onCancel: () => void;
+  onApply: (ids: string[]) => void;
+}) {
+  const isCancelling = status === OrderStatus.CANCELLED;
+  const shown = orders.slice(0, 8);
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>
+          Move {orders.length} order{orders.length === 1 ? '' : 's'} to {readableStatus(status)}?
+        </DialogTitle>
+        <DialogDescription>
+          Each one gets its own status-update email. Orders that cannot make this transition are
+          left untouched and reported back.
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-1.5">
+          {shown.map((order) => (
+            <span
+              key={order.id}
+              className="rounded-control bg-surface-sunken px-2 py-1 font-mono text-2xs font-bold text-ink"
+            >
+              #{order.orderNumber}
+            </span>
+          ))}
+          {orders.length > shown.length && (
+            <span className="px-2 py-1 text-2xs text-ink-subtle">
+              +{orders.length - shown.length} more
+            </span>
+          )}
+        </div>
+
+        {skipped > 0 && (
+          <p className="text-2xs text-ink-subtle">
+            {skipped} selected order{skipped === 1 ? '' : 's'} cannot be confirmed yet — already
+            past PLACED, or prepaid with the payment not captured. They stay as they are.
+          </p>
+        )}
+
+        {isCancelling && (
+          <p className="rounded-control border border-danger/40 bg-danger/5 p-3 text-2xs font-medium text-danger">
+            Cancelling puts every unit back into stock and starts a refund on each paid online
+            order. This cannot be undone.
+          </p>
+        )}
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel} disabled={isRunning}>
+          Keep as is
+        </Button>
+        <Button
+          variant={isCancelling ? 'danger' : 'default'}
+          isLoading={isRunning}
+          disabled={orders.length === 0}
+          onClick={() => onApply(orders.map((order) => order.id))}
+        >
+          {isCancelling ? 'Cancel orders' : `Move to ${readableStatus(status)}`}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }

@@ -1,14 +1,19 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowRight, MapPin, Package, UserRound } from 'lucide-react';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Separator } from '@/shared/ui/separator';
+import {
+  RecentOrderRowsSkeleton,
+  SummaryCardSkeleton,
+} from '@/features/auth/components/AccountSkeletons';
 import { OrderStatusBadge } from '@/features/orders/components/OrderStatusBadge';
 import { getSessionCustomer } from '@/features/auth/server/auth';
-import { getDefaultAddress, listAddresses } from '@/features/auth/server/addresses.repo';
-import { listCustomerOrders } from '@/features/orders/server/orders.repo';
+import { listAddresses } from '@/features/auth/server/addresses.repo';
+import { listCustomerOrders, type OrderPage } from '@/features/orders/server/orders.repo';
+import type { Address } from '@/features/auth/types';
 import { formatMinor } from '@/shared/lib/money';
 
 export const metadata: Metadata = {
@@ -22,11 +27,11 @@ export default async function AccountOverviewPage() {
   const customer = await getSessionCustomer();
   if (!customer) redirect('/login?next=/account');
 
-  const [addresses, defaultAddress, { orders, total }] = await Promise.all([
-    listAddresses(customer.id),
-    getDefaultAddress(customer.id),
-    listCustomerOrders(customer.id, { pageSize: 3 }),
-  ]);
+  // Started here but awaited inside the Suspense children below, so both queries
+  // run in parallel and neither holds up the parts of the page that do not read
+  // them. The profile card needs nothing but the session, so it paints first.
+  const addressesPromise = listAddresses(customer.id);
+  const ordersPromise = listCustomerOrders(customer.id, { pageSize: 3 });
 
   return (
     <>
@@ -44,20 +49,12 @@ export default async function AccountOverviewPage() {
                 : 'Mobile verified'
           }
         />
-        <SummaryCard
-          href="/account/addresses"
-          icon={MapPin}
-          label="Addresses"
-          value={`${addresses.length} saved`}
-          hint={defaultAddress ? `Default: ${defaultAddress.label}` : 'No default set'}
-        />
-        <SummaryCard
-          href="/account/orders"
-          icon={Package}
-          label="Orders"
-          value={`${total} order${total === 1 ? '' : 's'}`}
-          hint={orders[0] ? `Latest ${orders[0].orderNumber}` : 'Nothing ordered yet'}
-        />
+        <Suspense fallback={<SummaryCardSkeleton />}>
+          <AddressSummaryCard addresses={addressesPromise} />
+        </Suspense>
+        <Suspense fallback={<SummaryCardSkeleton />}>
+          <OrderSummaryCard page={ordersPromise} />
+        </Suspense>
       </div>
 
       <Card>
@@ -73,46 +70,89 @@ export default async function AccountOverviewPage() {
           </div>
           <Separator className="bg-line" />
 
-          {orders.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="text-xs text-ink-subtle">
-                You have not placed an order yet.{' '}
-                <Link href="/" className="font-semibold text-accent hover:underline">
-                  Start shopping
-                </Link>
-                .
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-line">
-              {orders.map((order) => (
-                <li key={order.id}>
-                  <Link
-                    href={`/account/orders/${order.id}`}
-                    className="flex flex-wrap items-center justify-between gap-3 p-5 transition-colors hover:bg-surface-sunken"
-                  >
-                    <div>
-                      <p className="font-mono text-xs font-bold text-ink">{order.orderNumber}</p>
-                      <p className="mt-0.5 text-2xs text-ink-subtle">
-                        {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                          dateStyle: 'medium',
-                        })}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-4">
-                      <OrderStatusBadge status={order.orderStatus} />
-                      <span className="w-24 text-right text-sm font-bold tabular-nums text-ink">
-                        {formatMinor(order.totalMinor)}
-                      </span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <Suspense fallback={<RecentOrderRowsSkeleton />}>
+            <RecentOrders page={ordersPromise} />
+          </Suspense>
         </CardContent>
       </Card>
     </>
+  );
+}
+
+/**
+ * `listAddresses` already sorts default first, then most recently touched —
+ * exactly what `getDefaultAddress` returns — so the first element is the
+ * default and the separate query for it is not needed.
+ */
+async function AddressSummaryCard({ addresses }: { addresses: Promise<Address[]> }) {
+  const saved = await addresses;
+  return (
+    <SummaryCard
+      href="/account/addresses"
+      icon={MapPin}
+      label="Addresses"
+      value={`${saved.length} saved`}
+      hint={saved[0] ? `Default: ${saved[0].label}` : 'No default set'}
+    />
+  );
+}
+
+async function OrderSummaryCard({ page }: { page: Promise<OrderPage> }) {
+  const { orders, total } = await page;
+  return (
+    <SummaryCard
+      href="/account/orders"
+      icon={Package}
+      label="Orders"
+      value={`${total} order${total === 1 ? '' : 's'}`}
+      hint={orders[0] ? `Latest ${orders[0].orderNumber}` : 'Nothing ordered yet'}
+    />
+  );
+}
+
+async function RecentOrders({ page }: { page: Promise<OrderPage> }) {
+  const { orders } = await page;
+
+  if (orders.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-xs text-ink-subtle">
+          You have not placed an order yet.{' '}
+          <Link href="/" className="font-semibold text-accent hover:underline">
+            Start shopping
+          </Link>
+          .
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ul className="divide-y divide-line">
+      {orders.map((order) => (
+        <li key={order.id}>
+          <Link
+            href={`/account/orders/${order.id}`}
+            className="flex flex-wrap items-center justify-between gap-3 p-5 transition-colors hover:bg-surface-sunken"
+          >
+            <div>
+              <p className="font-mono text-xs font-bold text-ink">{order.orderNumber}</p>
+              <p className="mt-0.5 text-2xs text-ink-subtle">
+                {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                  dateStyle: 'medium',
+                })}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-4">
+              <OrderStatusBadge status={order.orderStatus} />
+              <span className="w-24 text-right text-sm font-bold tabular-nums text-ink">
+                {formatMinor(order.totalMinor)}
+              </span>
+            </div>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 

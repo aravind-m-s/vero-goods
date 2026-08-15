@@ -1,6 +1,7 @@
 import 'server-only';
 
 import crypto from 'node:crypto';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { otpsCollection } from '@/shared/db/collections';
 import {
@@ -87,12 +88,19 @@ export async function clearAdminSession(): Promise<void> {
 
 // ------------------------------------------------------------- customer auth
 
-export async function getSessionCustomer(): Promise<User | null> {
+/**
+ * The current customer, or null.
+ *
+ * `cache()` deduplicates this per request: the account layout guards the route
+ * and every page under it needs the customer id, so without it a single page
+ * load pays for the cookie verification and the `users` lookup twice.
+ */
+export const getSessionCustomer = cache(async function getSessionCustomer(): Promise<User | null> {
   const cookieStore = await cookies();
   const session = await verifySessionValue(cookieStore.get(CUSTOMER_COOKIE_NAME)?.value);
   if (!session || session.role !== 'customer') return null;
   return getCustomerById(session.sub);
-}
+});
 
 export async function setCustomerSession(userId: string): Promise<void> {
   const cookieStore = await cookies();

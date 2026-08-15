@@ -18,6 +18,17 @@ const nextConfig: NextConfig = {
   // The Mongo driver is server-only; keep it out of any bundling attempt.
   serverExternalPackages: ['mongodb'],
 
+  experimental: {
+    staleTimes: {
+      // Dynamic segments default to 0, so re-visiting a page the shopper was on
+      // seconds ago re-ran every query and flashed the skeleton again. 30s of
+      // client-cache reuse makes going back to a page instant. Safe for stock:
+      // /api/cart/quote and /api/orders re-check quantities on the server, so a
+      // slightly stale product page cannot oversell.
+      dynamic: 30,
+    },
+  },
+
   poweredByHeader: false,
 };
 

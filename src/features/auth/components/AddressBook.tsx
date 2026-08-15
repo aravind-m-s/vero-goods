@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Home, MapPin, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
@@ -40,6 +41,7 @@ type Draft = typeof EMPTY;
  */
 export function AddressBook({ initial }: { initial: Address[] }) {
   const { success, error } = useToast();
+  const router = useRouter();
   const [addresses, setAddresses] = useState(initial);
   const [editing, setEditing] = useState<Address | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -118,6 +120,11 @@ export function AddressBook({ initial }: { initial: Address[] }) {
       });
       success(editing ? 'Address updated' : 'Address saved');
       setIsFormOpen(false);
+      // The list above is already correct locally, but the router still holds
+      // the pre-edit payload for this route and for the account overview, whose
+      // address card counts these. Without this, navigating away and back shows
+      // the old data until the client cache expires.
+      router.refresh();
     } catch {
       error('Could not reach the server');
     } finally {
@@ -137,6 +144,7 @@ export function AddressBook({ initial }: { initial: Address[] }) {
         sortAddresses(prev.map((item) => ({ ...item, isDefault: item.id === address.id })))
       );
       success(`${address.label} is now your default delivery address`);
+      router.refresh();
     } catch {
       error('Could not reach the server');
     }
@@ -158,6 +166,7 @@ export function AddressBook({ initial }: { initial: Address[] }) {
       setAddresses(sortAddresses(remaining));
       success('Address deleted');
       setToDelete(null);
+      router.refresh();
     } catch {
       error('Could not reach the server');
     } finally {

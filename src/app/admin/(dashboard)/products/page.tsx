@@ -5,6 +5,7 @@ import { SafeImage as Image } from '@/shared/ui/safe-image';
 import Link from 'next/link';
 import {
   Archive,
+  ArchiveRestore,
   Copy,
   Edit2,
   ExternalLink,
@@ -24,6 +25,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+  DropdownMenuLink,
+  DropdownMenuSeparator,
+} from '@/shared/ui/dropdown-menu';
 import { Input } from '@/shared/ui/input';
 import { Select } from '@/shared/ui/select';
 import { Skeleton } from '@/shared/ui/skeleton';
@@ -49,14 +56,67 @@ interface AdminProductRow {
   costPriceMinor: number;
   imageUrl?: string;
   updatedAt: string;
+  /** Present only on retired products. Absent means never archived. */
+  archivedAt?: string;
+  /** Reporting window is the API's `windowDays`. */
+  views: number;
+  uniqueViewers: number;
+  orderCount: number;
+}
+
+/**
+ * `LIVE` is everything not archived — active and hidden together. It is the
+ * default because it is the working catalogue; `ALL` exists for when you know
+ * you are looking for something retired.
+ */
+type StatusFilter = 'LIVE' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'ALL';
+
+const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: 'LIVE', label: 'Not archived' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'INACTIVE', label: 'Hidden' },
+  { value: 'ARCHIVED', label: 'Archived' },
+  { value: 'ALL', label: 'All including archived' },
+];
+
+function matchesStatus(product: AdminProductRow, filter: StatusFilter): boolean {
+  const archived = Boolean(product.archivedAt);
+  switch (filter) {
+    case 'LIVE':
+      return !archived;
+    case 'ACTIVE':
+      return product.isActive && !archived;
+    case 'INACTIVE':
+      return !product.isActive && !archived;
+    case 'ARCHIVED':
+      return archived;
+    case 'ALL':
+      return true;
+  }
+}
+
+/**
+ * Orders per unique viewer, as a percentage.
+ *
+ * Deliberately per *viewer* and not per view: three reloads by one shopper is
+ * one person deciding, and dividing by raw views would make every product that
+ * people revisit look like it converts badly.
+ */
+function conversionPercent(product: AdminProductRow): number | null {
+  if (product.uniqueViewers === 0) return null;
+  return Math.round((product.orderCount / product.uniqueViewers) * 100);
 }
 
 export default function AdminProductsPage() {
   const { success, error } = useToast();
   const [products, setProducts] = useState<AdminProductRow[]>([]);
+  const [windowDays, setWindowDays] = useState(30);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  // Archived products are excluded by default — that is what archiving them
+  // meant. They stay one filter away rather than being deleted, because
+  // invoices and past orders still resolve through them.
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('LIVE');
   const [toArchive, setToArchive] = useState<AdminProductRow | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [toDelete, setToDelete] = useState<AdminProductRow | null>(null);
@@ -73,8 +133,14 @@ export default function AdminProductsPage() {
           if (!cancelled) error('Could not load products');
           return;
         }
-        const data = (await response.json()) as { products: AdminProductRow[] };
-        if (!cancelled) setProducts(data.products);
+        const data = (await response.json()) as {
+          products: AdminProductRow[];
+          windowDays?: number;
+        };
+        if (!cancelled) {
+          setProducts(data.products);
+          if (data.windowDays) setWindowDays(data.windowDays);
+        }
       } catch {
         if (!cancelled) error('Network error loading products');
       } finally {
@@ -90,8 +156,7 @@ export default function AdminProductsPage() {
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     return products.filter((product) => {
-      if (statusFilter === 'ACTIVE' && !product.isActive) return false;
-      if (statusFilter === 'INACTIVE' && product.isActive) return false;
+      if (!matchesStatus(product, statusFilter)) return false;
       if (!term) return true;
       return (
         product.title.toLowerCase().includes(term) || product.slug.toLowerCase().includes(term)
@@ -129,7 +194,11 @@ export default function AdminProductsPage() {
         return;
       }
       setProducts((prev) =>
-        prev.map((item) => (item.id === toArchive.id ? { ...item, isActive: false } : item))
+        prev.map((item) =>
+          item.id === toArchive.id
+            ? { ...item, isActive: false, archivedAt: new Date().toISOString() }
+            : item
+        )
       );
       success(`${toArchive.title} archived`);
       setToArchive(null);
@@ -137,6 +206,33 @@ export default function AdminProductsPage() {
       error('Network error');
     } finally {
       setIsArchiving(false);
+    }
+  };
+
+  /**
+   * Comes back hidden, not live. Putting something retired months ago straight
+   * onto the storefront — at whatever price it carried then — is a decision the
+   * admin should make on purpose, in a second step.
+   */
+  const handleUnarchive = async (product: AdminProductRow) => {
+    try {
+      const response = await fetch('/api/admin/products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: product.id, archived: false }),
+      });
+      if (!response.ok) {
+        error('Could not restore the product');
+        return;
+      }
+      setProducts((prev) =>
+        prev.map((item) =>
+          item.id === product.id ? { ...item, archivedAt: undefined, isActive: false } : item
+        )
+      );
+      success(`${product.title} restored — still hidden, publish it when you are ready`);
+    } catch {
+      error('Network error');
     }
   };
 
@@ -185,8 +281,8 @@ export default function AdminProductsPage() {
             Products
           </h1>
           <p className="mt-1 text-xs text-ink-subtle">
-            {products.length} product{products.length === 1 ? '' : 's'} · stock and margin shown per
-            product
+            {products.length} product{products.length === 1 ? '' : 's'} · stock and margin per
+            product, views and conversion over the last {windowDays} days
           </p>
         </div>
         <Link href="/admin/products/new">
@@ -209,13 +305,13 @@ export default function AdminProductsPage() {
         <div className="sm:w-48">
           <Select
             value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(event.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')
-            }
+            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
           >
-            <option value="ALL">All statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Hidden</option>
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </Select>
         </div>
       </div>
@@ -229,6 +325,12 @@ export default function AdminProductsPage() {
               <TableHead className="text-right">Stock</TableHead>
               <TableHead className="text-right">Price</TableHead>
               <TableHead className="text-right">Margin</TableHead>
+              <TableHead className="text-right" title={`Last ${windowDays} days`}>
+                Views
+              </TableHead>
+              <TableHead className="text-right" title={`Orders per unique viewer, last ${windowDays} days`}>
+                Conv.
+              </TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -237,14 +339,14 @@ export default function AdminProductsPage() {
             {isLoading ? (
               Array.from({ length: 4 }).map((_, index) => (
                 <TableRow key={index}>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={9}>
                     <Skeleton className="h-8 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : visible.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-xs text-ink-subtle">
+                <TableCell colSpan={9} className="py-10 text-center text-xs text-ink-subtle">
                   No products match your filters.
                 </TableCell>
               </TableRow>
@@ -255,6 +357,7 @@ export default function AdminProductsPage() {
                   product.fromPriceMinor > 0
                     ? Math.round((marginMinor / product.fromPriceMinor) * 100)
                     : 0;
+                const conversion = conversionPercent(product);
 
                 return (
                   <TableRow key={product.id}>
@@ -301,73 +404,106 @@ export default function AdminProductsPage() {
                         <span className="ml-1 text-ink-subtle">({marginPercent}%)</span>
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={product.isActive ? 'success' : 'secondary'}>
-                        {product.isActive ? 'Active' : 'Hidden'}
-                      </Badge>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      <span className="font-semibold text-ink-muted">{product.views}</span>
+                      <span className="ml-1 text-ink-subtle">
+                        ({product.uniqueViewers} unique)
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right text-xs font-semibold tabular-nums">
+                      {conversion === null ? (
+                        <span className="text-ink-subtle">—</span>
+                      ) : (
+                        <span
+                          className={
+                            conversion === 0
+                              ? 'text-danger'
+                              : conversion >= 5
+                                ? 'text-success'
+                                : 'text-ink-muted'
+                          }
+                          title={`${product.orderCount} order${product.orderCount === 1 ? '' : 's'} from ${product.uniqueViewers} viewer${product.uniqueViewers === 1 ? '' : 's'}`}
+                        >
+                          {conversion}%
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
+                      {product.archivedAt ? (
+                        <Badge
+                          variant="secondary"
+                          title={`Archived ${new Date(product.archivedAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}`}
+                        >
+                          Archived
+                        </Badge>
+                      ) : (
+                        <Badge variant={product.isActive ? 'success' : 'secondary'}>
+                          {product.isActive ? 'Active' : 'Hidden'}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {/* Edit stays in reach because it is why you came to this
+                          row. Everything rarer moves behind the menu, which is
+                          what keeps Delete from sitting one stray click away
+                          from it. */}
                       <div className="flex items-center justify-end gap-1">
-                        <IconButton
-                          size="icon"
-                          label={product.isActive ? 'Hide from storefront' : 'Publish'}
-                          onClick={() => handleToggleActive(product)}
-                        >
-                          {product.isActive ? (
-                            <EyeOff className="h-3.5 w-3.5" />
-                          ) : (
-                            <Eye className="h-3.5 w-3.5" />
-                          )}
-                        </IconButton>
-
-                        <IconButton
-                          size="icon"
-                          label="Copy URL"
-                          onClick={() => copyUrl(product.slug)}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </IconButton>
-
-                        <Link href={`/products/${product.slug}`} target="_blank">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 p-0"
-                            title="View on storefront"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </Button>
-                        </Link>
-
                         <Link href={`/admin/products/${product.id}/edit`}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 p-0"
-                            title="Edit"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
+                          <Button variant="outline" size="sm" className="gap-1.5">
+                            <Edit2 className="h-3.5 w-3.5" /> Edit
                           </Button>
                         </Link>
 
-                        <IconButton
-                          size="icon"
-                          label="Archive"
-                          onClick={() => setToArchive(product)}
-                        >
-                          <Archive className="h-3.5 w-3.5 text-warning" />
-                        </IconButton>
+                        <DropdownMenu label={`More actions for ${product.title}`}>
+                          {/* Publishing an archived product straight to the
+                              storefront would skip the decision to un-retire
+                              it, so it is not offered until it leaves the
+                              archive. */}
+                          {!product.archivedAt && (
+                            <DropdownMenuItem onSelect={() => handleToggleActive(product)}>
+                              {product.isActive ? (
+                                <>
+                                  <EyeOff className="h-3.5 w-3.5 shrink-0" /> Hide from storefront
+                                </>
+                              ) : (
+                                <>
+                                  <Eye className="h-3.5 w-3.5 shrink-0" /> Publish to storefront
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                          )}
 
-                        <IconButton
-                          size="icon"
-                          label="Delete permanently"
-                          onClick={() => {
-                            setDeleteConfirmText('');
-                            setToDelete(product);
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-danger" />
-                        </IconButton>
+                          <DropdownMenuItem onSelect={() => copyUrl(product.slug)}>
+                            <Copy className="h-3.5 w-3.5 shrink-0" /> Copy product URL
+                          </DropdownMenuItem>
+
+                          <DropdownMenuLink href={`/products/${product.slug}`} external>
+                            <ExternalLink className="h-3.5 w-3.5 shrink-0" /> View on storefront
+                          </DropdownMenuLink>
+
+                          <DropdownMenuSeparator />
+
+                          {product.archivedAt ? (
+                            <DropdownMenuItem onSelect={() => handleUnarchive(product)}>
+                              <ArchiveRestore className="h-3.5 w-3.5 shrink-0 text-success" />{' '}
+                              Restore from archive
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onSelect={() => setToArchive(product)}>
+                              <Archive className="h-3.5 w-3.5 shrink-0 text-warning" /> Archive
+                            </DropdownMenuItem>
+                          )}
+
+                          <DropdownMenuItem
+                            destructive
+                            onSelect={() => {
+                              setDeleteConfirmText('');
+                              setToDelete(product);
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 shrink-0" /> Delete permanently
+                          </DropdownMenuItem>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -383,8 +519,9 @@ export default function AdminProductsPage() {
           <DialogHeader>
             <DialogTitle>Archive {toArchive?.title}?</DialogTitle>
             <DialogDescription>
-              The product is hidden from the storefront and all its variants stop selling. It is not
-              deleted — past orders, invoices and returns still reference it.
+              The product comes off the storefront and out of this list. Nothing is deleted — past
+              orders, invoices and returns still resolve through it, your variant settings are kept
+              exactly as they are, and you can restore it from the Archived filter at any time.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -440,30 +577,5 @@ export default function AdminProductsPage() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function IconButton({
-  label,
-  size = 'icon',
-  onClick,
-  children,
-}: {
-  label: string;
-  size?: 'sm' | 'md' | 'icon' | 'lg';
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size={size}
-      className="h-8 w-8 p-0"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-    >
-      {children}
-    </Button>
   );
 }
