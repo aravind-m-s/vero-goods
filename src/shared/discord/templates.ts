@@ -88,7 +88,7 @@ export function orderPlacedDiscord(order: Order, items: OrderItem[]): DiscordMes
           { name: 'Email', value: truncateField(order.email || '—'), inline: true },
           { name: 'Delivery address', value: addressBlock(order) },
           { name: `Items (${items.length})`, value: itemLines(items) },
-          { name: 'Totals', value: totalsBlock(order), inline: true },
+          // { name: 'Totals', value: totalsBlock(order), inline: true },
           {
             name: 'Payment',
             value: `${isCod ? 'Cash on delivery' : 'Razorpay'}\n${order.paymentStatus}`,
