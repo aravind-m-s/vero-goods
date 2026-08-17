@@ -3,6 +3,7 @@ import { getVariantsByIds } from '@/features/catalog/server/products.repo';
 import { productsCollection, stripIds } from '@/shared/db/collections';
 import { calculateTotals } from '@/features/checkout/server/pricing';
 import { PriceQuoteSchema } from '@/features/checkout/schemas';
+import { basketPaymentMethods, type PaymentSupport } from '@/features/catalog/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
       lines: [],
       totals: calculateTotals([], paymentMethod),
       unavailableVariantIds: [],
+      availablePaymentMethods: basketPaymentMethods([]),
     });
   }
 
@@ -45,6 +47,8 @@ export async function POST(request: NextRequest) {
 
   const unavailableVariantIds: string[] = [];
   const lines = [];
+  /** Payment rules of the products actually being bought, in basket order. */
+  const supports: Array<PaymentSupport | undefined> = [];
 
   for (const item of items) {
     const variant = variants.find((v) => v.id === item.variantId);
@@ -57,6 +61,8 @@ export async function POST(request: NextRequest) {
 
     const availableQty = variant.allowBackorder ? item.quantity : variant.stockQty;
     const quantity = Math.min(item.quantity, availableQty);
+
+    if (quantity > 0) supports.push(product.paymentSupport);
 
     lines.push({
       variantId: variant.id,
@@ -77,6 +83,13 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // A method the basket does not accept cannot price it either: quoting a COD
+  // fee on a prepaid-only basket would show a total nobody can ever be charged.
+  const availablePaymentMethods = basketPaymentMethods(supports);
+  const effectiveMethod = availablePaymentMethods.includes(paymentMethod)
+    ? paymentMethod
+    : availablePaymentMethods[0] ?? 'RAZORPAY';
+
   const totals = calculateTotals(
     lines
       .filter((line) => line.quantity > 0)
@@ -86,8 +99,8 @@ export async function POST(request: NextRequest) {
         totalMinor: line.totalMinor,
         gstRatePercent: line.gstRatePercent,
       })),
-    paymentMethod
+    effectiveMethod
   );
 
-  return NextResponse.json({ lines, totals, unavailableVariantIds });
+  return NextResponse.json({ lines, totals, unavailableVariantIds, availablePaymentMethods });
 }

@@ -40,6 +40,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [trackingNumber, setTrackingNumber] = useState('');
   const [note, setNote] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  // The shipment editor is its own form: it is used after the order has already
+  // moved, when there is no status change to attach the AWB to.
+  const [shipmentCourier, setShipmentCourier] = useState('');
+  const [shipmentTracking, setShipmentTracking] = useState('');
+  const [isSavingShipment, setIsSavingShipment] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +57,8 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       setData(payload);
       setCourier(payload.order.courier ?? '');
       setTrackingNumber(payload.order.trackingNumber ?? '');
+      setShipmentCourier(payload.order.courier ?? '');
+      setShipmentTracking(payload.order.trackingNumber ?? '');
       setNextStatus('');
     } catch {
       error('Network error loading the order');
@@ -96,6 +103,33 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
+  const handleShipmentSave = async () => {
+    setIsSavingShipment(true);
+    try {
+      const response = await fetch(`/api/admin/orders/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        // Both fields are always sent, so clearing a mistyped AWB works.
+        body: JSON.stringify({ courier: shipmentCourier, trackingNumber: shipmentTracking }),
+      });
+      const payload = (await response.json()) as { error?: string; emailed?: boolean };
+      if (!response.ok) {
+        error(payload.error ?? 'Could not save the tracking details');
+        return;
+      }
+      success(
+        payload.emailed
+          ? 'Tracking saved and the customer has been emailed'
+          : 'Tracking saved'
+      );
+      await load();
+    } catch {
+      error('Network error');
+    } finally {
+      setIsSavingShipment(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -120,7 +154,15 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   // The API enforces this too — the dropdown just avoids offering a move that
   // will be rejected.
   const allowedNext = ALLOWED_STATUS_TRANSITIONS[order.orderStatus];
-  const requiresTracking = nextStatus === OrderStatus.SHIPPED;
+  // Offered on the way out, never demanded: the courier issues the AWB after
+  // the handover, so it is filled in from the shipment panel below instead.
+  const isShipping = nextStatus === OrderStatus.SHIPPED;
+  const isDispatched =
+    order.orderStatus === OrderStatus.SHIPPED ||
+    order.orderStatus === OrderStatus.OUT_FOR_DELIVERY ||
+    order.orderStatus === OrderStatus.DELIVERED;
+  const shipmentDirty =
+    shipmentCourier !== (order.courier ?? '') || shipmentTracking !== (order.trackingNumber ?? '');
   // Prepaid orders cannot be confirmed before the money is captured.
   const paymentBlocksConfirm =
     order.paymentMethod !== 'COD' && order.paymentStatus !== PaymentStatus.PAID;
@@ -310,10 +352,10 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                     )}
                   </div>
 
-                  {requiresTracking && (
+                  {isShipping && (
                     <>
                       <div className="space-y-1">
-                        <Label className="text-xs">Courier</Label>
+                        <Label className="text-xs">Courier (optional)</Label>
                         <Input
                           value={courier}
                           onChange={(event) => setCourier(event.target.value)}
@@ -321,12 +363,17 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">Tracking number (AWB)</Label>
+                        <Label className="text-xs">Tracking number (AWB, optional)</Label>
                         <Input
                           value={trackingNumber}
                           onChange={(event) => setTrackingNumber(event.target.value)}
                           className="font-mono text-xs"
+                          placeholder="Add it now or later"
                         />
+                        <p className="text-2xs text-ink-subtle">
+                          Leave blank if the courier has not issued it yet — you can add it from
+                          this page once the order is shipped.
+                        </p>
                       </div>
                     </>
                   )}
@@ -339,11 +386,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   <Button
                     className="w-full"
                     onClick={handleUpdate}
-                    disabled={
-                      !nextStatus ||
-                      confirmBlocked ||
-                      (requiresTracking && (!courier || !trackingNumber))
-                    }
+                    disabled={!nextStatus || confirmBlocked}
                     isLoading={isUpdating}
                   >
                     Update status
@@ -356,6 +399,48 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               )}
             </CardContent>
           </Card>
+
+          {isDispatched && (
+            <Card className="border-line">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                  <Truck className="h-4 w-4 text-ink-subtle" /> Shipment
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Courier</Label>
+                  <Input
+                    value={shipmentCourier}
+                    onChange={(event) => setShipmentCourier(event.target.value)}
+                    placeholder="Delhivery"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Tracking number (AWB)</Label>
+                  <Input
+                    value={shipmentTracking}
+                    onChange={(event) => setShipmentTracking(event.target.value)}
+                    className="font-mono text-xs"
+                    placeholder="Not issued yet"
+                  />
+                </div>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={handleShipmentSave}
+                  disabled={!shipmentDirty}
+                  isLoading={isSavingShipment}
+                >
+                  Save tracking details
+                </Button>
+                <p className="text-2xs text-ink-subtle">
+                  Saving a new tracking number on a dispatched order emails it to the customer.
+                  Editing the courier alone does not.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-line">
             <CardHeader className="pb-3">

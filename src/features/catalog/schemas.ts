@@ -55,6 +55,8 @@ export const ProductFormSchema = z
     isActive: z.boolean().default(true),
     gstRatePercent: z.coerce.number().min(0).max(28).default(18),
     hsnCode: z.string().max(12).optional(),
+    /** Which payment methods checkout offers for this product. */
+    paymentSupport: z.enum(['BOTH', 'ONLINE', 'COD']).default('BOTH'),
     imageUrls: z
       .array(z.url('Must be a valid URL'))
       .min(1, 'At least one product image URL is required')

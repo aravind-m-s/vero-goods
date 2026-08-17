@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SafeImage as Image } from '@/shared/ui/safe-image';
 import { Play } from 'lucide-react';
 import type { ProductImage, ProductVideo } from '@/features/catalog/types';
@@ -50,6 +50,26 @@ export function toEmbedUrl(rawUrl: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Same embed, told to start playing.
+ *
+ * Muted as well, because that is the only kind of unattended start a browser
+ * permits inside a cross-origin frame — an embed asked to autoplay with sound
+ * is simply refused, and the shopper gets a still frame instead of a video.
+ * `mute` is YouTube's spelling, `muted` is Vimeo's; each ignores the other's.
+ */
+function withAutoplay(embedUrl: string): string {
+  try {
+    const url = new URL(embedUrl);
+    url.searchParams.set('autoplay', '1');
+    url.searchParams.set('mute', '1');
+    url.searchParams.set('muted', '1');
+    return url.toString();
+  } catch {
+    return embedUrl;
+  }
+}
+
 export function ProductMedia({
   productTitle,
   images,
@@ -80,7 +100,41 @@ export function ProductMedia({
   ];
 
   const [activeIndex, setActiveIndex] = useState(0);
+  /**
+   * Autoplay is earned by a tap on a thumbnail, never granted on load.
+   *
+   * A product whose first media item is a video would otherwise start playing
+   * at people who only opened the page — and on the first paint the video is
+   * competing with the LCP image for the connection. Once a shopper has picked
+   * a thumbnail, playing what they picked is the whole point.
+   */
+  const [autoplay, setAutoplay] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const active = items[activeIndex];
+
+  const showItem = (index: number) => {
+    setActiveIndex(index);
+    setAutoplay(true);
+  };
+
+  /**
+   * Starts a direct-file video the moment it becomes the stage.
+   *
+   * Sound first: the click that got here is a user gesture, so a browser will
+   * usually allow it. When it does not, the rejected promise is the signal to
+   * try again muted rather than leave the shopper looking at a frozen frame.
+   */
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element || !autoplay) return;
+
+    void element.play().catch(() => {
+      element.muted = true;
+      void element.play().catch(() => {
+        // Autoplay refused outright. The controls are right there.
+      });
+    });
+  }, [autoplay, activeIndex]);
 
   return (
     <div className="space-y-3">
@@ -101,7 +155,8 @@ export function ProductMedia({
           />
         ) : active.embedUrl ? (
           <iframe
-            src={active.embedUrl}
+            key={active.id}
+            src={autoplay ? withAutoplay(active.embedUrl) : active.embedUrl}
             title={active.title}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
@@ -109,6 +164,8 @@ export function ProductMedia({
           />
         ) : (
           <video
+            key={active.id}
+            ref={videoRef}
             src={active.url}
             poster={active.poster}
             controls
@@ -129,7 +186,7 @@ export function ProductMedia({
             <button
               key={item.id}
               type="button"
-              onClick={() => setActiveIndex(index)}
+              onClick={() => showItem(index)}
               aria-label={
                 item.kind === 'image'
                   ? `Show image ${index + 1} of ${items.length}`

@@ -11,7 +11,7 @@ import {
 import { getVariantsByIds } from '@/features/catalog/server/products.repo';
 import { productImagesCollection, productsCollection, stripIds } from '@/shared/db/collections';
 import { updateCustomerContact } from '@/features/auth/server/users.repo';
-import { CURRENCY } from '@/features/catalog/types';
+import { CURRENCY, allowedPaymentMethods } from '@/features/catalog/types';
 import { OrderStatus, PaymentStatus, type Order, type OrderItem } from '@/features/orders/types';
 import { sendEmail } from '@/shared/email/send';
 import { orderReceivedEmail } from '@/shared/email/templates';
@@ -102,6 +102,20 @@ export async function POST(request: NextRequest) {
     if (!variant || !product || !variant.isActive || !product.isActive) {
       return NextResponse.json(
         { error: `An item in your cart is no longer available` },
+        { status: 409 }
+      );
+    }
+
+    // The storefront hides a method the basket does not accept; this is the
+    // check that actually holds, since nothing stops a hand-rolled request.
+    if (!allowedPaymentMethods(product.paymentSupport).includes(input.paymentMethod)) {
+      return NextResponse.json(
+        {
+          error:
+            input.paymentMethod === 'COD'
+              ? `${product.title} cannot be bought with cash on delivery. Please pay online.`
+              : `${product.title} is cash on delivery only.`,
+        },
         { status: 409 }
       );
     }

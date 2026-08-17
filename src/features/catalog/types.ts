@@ -5,6 +5,45 @@
 
 export const CURRENCY = 'INR';
 
+/**
+ * Which ways a product may be paid for. Set per product by the admin: some
+ * items are too costly or too fragile to hand to a courier on COD terms, and
+ * some suppliers only ship against a prepaid order.
+ */
+export type PaymentSupport = 'BOTH' | 'ONLINE' | 'COD';
+
+/** Products stored before this field existed accept either method. */
+export const DEFAULT_PAYMENT_SUPPORT: PaymentSupport = 'BOTH';
+
+/**
+ * The checkout methods a product allows. `RAZORPAY` is the online rail, and is
+ * the only one every product is guaranteed to offer.
+ */
+export function allowedPaymentMethods(
+  support: PaymentSupport | undefined
+): Array<'COD' | 'RAZORPAY'> {
+  switch (support ?? DEFAULT_PAYMENT_SUPPORT) {
+    case 'COD':
+      return ['COD'];
+    case 'ONLINE':
+      return ['RAZORPAY'];
+    default:
+      return ['COD', 'RAZORPAY'];
+  }
+}
+
+/**
+ * What a whole basket allows: a method has to be accepted by every product in
+ * it, since one order carries one payment.
+ */
+export function basketPaymentMethods(
+  supports: Array<PaymentSupport | undefined>
+): Array<'COD' | 'RAZORPAY'> {
+  return (['COD', 'RAZORPAY'] as const).filter((method) =>
+    supports.every((support) => allowedPaymentMethods(support).includes(method))
+  );
+}
+
 /** Supplier/fulfilment metadata. Dropshipping-specific, admin-only — never sent to the storefront. */
 export interface SupplierInfo {
   name: string;
@@ -27,6 +66,11 @@ export interface Product {
   gstRatePercent: number;
   /** HSN code — required on a compliant Indian GST invoice. */
   hsnCode?: string;
+  /**
+   * Which payment methods checkout may offer for this product. Absent on
+   * products created before it existed, which is read as `BOTH`.
+   */
+  paymentSupport?: PaymentSupport;
   /**
    * Set when the product is retired, cleared when it is brought back.
    *

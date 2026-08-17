@@ -22,6 +22,7 @@ import {
   refreshQuote,
   useCheckoutCount,
   useCheckoutLines,
+  useCheckoutPaymentMethods,
   useCheckoutTotals,
   useIsCartHydrated,
   useIsDirectBuy,
@@ -74,6 +75,8 @@ export function CheckoutView() {
   const lines = useCheckoutLines();
   const totals = useCheckoutTotals();
   const cartCount = useCheckoutCount();
+  // Per-product rule, intersected across the basket by the quote endpoint.
+  const availableMethods = useCheckoutPaymentMethods();
   const isDirectBuy = useIsDirectBuy();
   const isHydrated = useIsCartHydrated();
   const { success: showSuccess, error: showError } = useToast();
@@ -148,6 +151,19 @@ export function CheckoutView() {
   useEffect(() => {
     if (paymentMethod) void refreshQuote(paymentMethod);
   }, [paymentMethod]);
+
+  /**
+   * Keeps the selection on something the basket actually accepts.
+   *
+   * The method is remembered across visits and defaults to online, so a basket
+   * that turns out to be COD-only — or a remembered COD choice on a basket that
+   * refuses it — would otherwise sit on a method the order API rejects.
+   */
+  useEffect(() => {
+    if (availableMethods.length === 0) return;
+    if (availableMethods.includes(paymentMethod)) return;
+    setValue('paymentMethod', availableMethods[0]);
+  }, [availableMethods, paymentMethod, setValue]);
 
   /**
    * Totals to show while that refresh is still in the air.
@@ -579,32 +595,51 @@ export function CheckoutView() {
                 <CardTitle>Payment method</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2.5">
-                <PaymentOption
-                  {...register('paymentMethod')}
-                  value="RAZORPAY"
-                  checked={paymentMethod === 'RAZORPAY'}
-                  icon={<Landmark className="h-4 w-4" />}
-                  title="Pay online"
-                  subtitle="UPI, cards and netbanking via Razorpay"
-                />
-                <PaymentOption
-                  {...register('paymentMethod')}
-                  value="COD"
-                  checked={paymentMethod === 'COD'}
-                  icon={<Banknote className="h-4 w-4" />}
-                  title="Cash on delivery"
-                  // Reads the configured fee rather than the one applied to this
-                  // basket: the latter is zero until COD is actually selected,
-                  // so the label has to describe the option, not the current total.
-                  // Falls back to a statement with no number in it, because the
-                  // placeholder totals are zero until the first quote returns
-                  // and "no handling fee" would be a claim rather than a blank.
-                  subtitle={
-                    totals.codFeeIfSelectedMinor > 0
-                      ? `${formatMinor(totals.codFeeIfSelectedMinor)} handling fee applies`
-                      : 'Pay in cash when it arrives'
-                  }
-                />
+                {/* Only what every product in the basket accepts is shown. A
+                    method offered and then refused at the order API is worse
+                    than one that was never on screen. */}
+                {availableMethods.includes('RAZORPAY') && (
+                  <PaymentOption
+                    {...register('paymentMethod')}
+                    value="RAZORPAY"
+                    checked={paymentMethod === 'RAZORPAY'}
+                    icon={<Landmark className="h-4 w-4" />}
+                    title="Pay online"
+                    subtitle="UPI, cards and netbanking via Razorpay"
+                  />
+                )}
+                {availableMethods.includes('COD') && (
+                  <PaymentOption
+                    {...register('paymentMethod')}
+                    value="COD"
+                    checked={paymentMethod === 'COD'}
+                    icon={<Banknote className="h-4 w-4" />}
+                    title="Cash on delivery"
+                    // Reads the configured fee rather than the one applied to this
+                    // basket: the latter is zero until COD is actually selected,
+                    // so the label has to describe the option, not the current total.
+                    // Falls back to a statement with no number in it, because the
+                    // placeholder totals are zero until the first quote returns
+                    // and "no handling fee" would be a claim rather than a blank.
+                    subtitle={
+                      totals.codFeeIfSelectedMinor > 0
+                        ? `${formatMinor(totals.codFeeIfSelectedMinor)} handling fee applies`
+                        : 'Pay in cash when it arrives'
+                    }
+                  />
+                )}
+                {availableMethods.length === 1 && (
+                  <p className="text-2xs text-ink-subtle">
+                    {availableMethods[0] === 'COD'
+                      ? 'Something in your basket is sold on cash on delivery only.'
+                      : 'Something in your basket cannot be sent cash on delivery.'}
+                  </p>
+                )}
+                {/* One basket pays one way. A cash-only product together with a
+                    prepaid-only one leaves nothing that covers both. */}
+                {availableMethods.length === 0 && (
+                  <AuthError message="These items cannot be paid for together — one is cash on delivery only and another is prepaid only. Please order them separately." />
+                )}
                 {errors.paymentMethod && <AuthError message={errors.paymentMethod.message ?? ''} />}
               </CardContent>
             </Card>
@@ -670,7 +705,7 @@ export function CheckoutView() {
                   className="w-full"
                   onClick={handlePayClick}
                   isLoading={isPlacingOrder}
-                  disabled={lines.length === 0}
+                  disabled={lines.length === 0 || availableMethods.length === 0}
                 >
                   {paymentMethod === 'COD'
                     ? `Place order · ${formatMinor(displayTotals.totalMinor)}`

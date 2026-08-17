@@ -107,7 +107,12 @@ interface QuoteResponse {
   lines: QuoteLine[];
   totals: QuoteTotals;
   unavailableVariantIds: string[];
+  /** Methods every product in this basket accepts. Server-decided, per product. */
+  availablePaymentMethods: PaymentMethod[];
 }
+
+/** Assumed until a quote says otherwise, so checkout never starts with nothing offered. */
+const ALL_PAYMENT_METHODS: PaymentMethod[] = ['COD', 'RAZORPAY'];
 
 async function requestQuote(
   items: CartEntry[],
@@ -175,6 +180,7 @@ interface CartState {
   lines: QuoteLine[];
   totals: QuoteTotals;
   unavailableVariantIds: string[];
+  availablePaymentMethods: PaymentMethod[];
   isPricing: boolean;
   isHydrated: boolean;
   paymentMethod: PaymentMethod;
@@ -217,6 +223,7 @@ export const useCartStore = create<CartState>()(
       lines: EMPTY_LINES,
       totals: EMPTY_TOTALS,
       unavailableVariantIds: [],
+      availablePaymentMethods: ALL_PAYMENT_METHODS,
       isPricing: false,
       isHydrated: false,
       paymentMethod: 'RAZORPAY',
@@ -271,6 +278,7 @@ export const useCartStore = create<CartState>()(
             lines: EMPTY_LINES,
             totals: EMPTY_TOTALS,
             unavailableVariantIds: [],
+            availablePaymentMethods: ALL_PAYMENT_METHODS,
             isPricing: false,
           });
           return;
@@ -306,6 +314,7 @@ export const useCartStore = create<CartState>()(
             lines: data.lines,
             totals: data.totals,
             unavailableVariantIds: data.unavailableVariantIds,
+            availablePaymentMethods: data.availablePaymentMethods ?? ALL_PAYMENT_METHODS,
             entries,
           });
         } catch {
@@ -340,6 +349,7 @@ interface DirectBuyState {
   entry: CartEntry | null;
   lines: QuoteLine[];
   totals: QuoteTotals;
+  availablePaymentMethods: PaymentMethod[];
   isPricing: boolean;
 
   start: (variantId: string, quantity?: number) => void;
@@ -355,6 +365,7 @@ export const useDirectBuyStore = create<DirectBuyState>()(
       entry: null,
       lines: EMPTY_LINES,
       totals: EMPTY_TOTALS,
+      availablePaymentMethods: ALL_PAYMENT_METHODS,
       isPricing: false,
 
       start: (variantId, quantity = 1) => {
@@ -364,14 +375,25 @@ export const useDirectBuyStore = create<DirectBuyState>()(
 
       clear: () => {
         directSeq += 1;
-        set({ entry: null, lines: EMPTY_LINES, totals: EMPTY_TOTALS, isPricing: false });
+        set({
+          entry: null,
+          lines: EMPTY_LINES,
+          totals: EMPTY_TOTALS,
+          availablePaymentMethods: ALL_PAYMENT_METHODS,
+          isPricing: false,
+        });
       },
 
       price: async () => {
         const seq = ++directSeq;
         const entry = get().entry;
         if (!entry) {
-          set({ lines: EMPTY_LINES, totals: EMPTY_TOTALS, isPricing: false });
+          set({
+            lines: EMPTY_LINES,
+            totals: EMPTY_TOTALS,
+            availablePaymentMethods: ALL_PAYMENT_METHODS,
+            isPricing: false,
+          });
           return;
         }
 
@@ -390,6 +412,7 @@ export const useDirectBuyStore = create<DirectBuyState>()(
           set({
             lines: data.lines,
             totals: data.totals,
+            availablePaymentMethods: data.availablePaymentMethods ?? ALL_PAYMENT_METHODS,
             // Stock may not cover what they asked for.
             entry:
               line.quantity === line.requestedQuantity
@@ -506,6 +529,18 @@ export function useCheckoutCount(): number {
   const directQty = useDirectBuyStore((state) => state.entry?.quantity ?? null);
   const cartCount = useCartCount();
   return directQty ?? cartCount;
+}
+
+/**
+ * Which payment methods checkout may offer for what is being bought. Decided
+ * per product by the admin and intersected server-side, so a basket mixing a
+ * prepaid-only product with a COD one offers online payment alone.
+ */
+export function useCheckoutPaymentMethods(): PaymentMethod[] {
+  const isDirect = useIsDirectBuy();
+  const direct = useDirectBuyStore((state) => state.availablePaymentMethods);
+  const cart = useCartStore((state) => state.availablePaymentMethods);
+  return isDirect ? direct : cart;
 }
 
 export function useIsCheckoutPricing(): boolean {
