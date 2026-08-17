@@ -66,6 +66,8 @@ export interface ProductFormInitialValues {
   gstRatePercent: number;
   hsnCode?: string;
   paymentSupport: PaymentSupport;
+  /** Delivery charge in rupees. */
+  shippingPrice: number;
   imageUrls: string[];
   videoUrls: string[];
   variants: VariantDraft[];
@@ -90,6 +92,7 @@ export function ProductForm({
   const [gstRatePercent, setGstRatePercent] = useState(String(initial.gstRatePercent));
   const [hsnCode, setHsnCode] = useState(initial.hsnCode ?? '');
   const [paymentSupport, setPaymentSupport] = useState<PaymentSupport>(initial.paymentSupport);
+  const [shippingPrice, setShippingPrice] = useState(String(initial.shippingPrice));
   const [imageUrls, setImageUrls] = useState<string[]>(initial.imageUrls);
   const [videoUrls, setVideoUrls] = useState<string[]>(initial.videoUrls);
   /**
@@ -202,6 +205,8 @@ export function ProductForm({
       gstRatePercent: Number(gstRatePercent),
       hsnCode: hsnCode || undefined,
       paymentSupport,
+      // An emptied field is free delivery, not a broken number.
+      shippingPrice: shippingPrice === '' ? 0 : Number(shippingPrice),
       imageUrls,
       videoUrls,
       variants: variants.map((variant) => ({
@@ -401,6 +406,23 @@ export function ProductForm({
                     error={fieldErrors.hsnCode}
                   />
                   <p className="text-3xs text-ink-subtle">Required for tax compliance.</p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="shipping">Shipping charge (₹)</Label>
+                  <Input
+                    id="shipping"
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={shippingPrice}
+                    onChange={(event) => setShippingPrice(event.target.value)}
+                    placeholder="0"
+                    error={fieldErrors.shippingPrice}
+                  />
+                  <p className="text-3xs text-ink-subtle">
+                    0 means free delivery, and the product page says so. A basket is charged the
+                    highest shipping of the products in it.
+                  </p>
                 </div>
               </div>
             </CardContent>

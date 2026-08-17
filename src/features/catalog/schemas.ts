@@ -57,6 +57,12 @@ export const ProductFormSchema = z
     hsnCode: z.string().max(12).optional(),
     /** Which payment methods checkout offers for this product. */
     paymentSupport: z.enum(['BOTH', 'ONLINE', 'COD']).default('BOTH'),
+    /** Delivery charge in rupees. Zero is legal and means free delivery. */
+    shippingPrice: z.coerce
+      .number()
+      .min(0, 'Shipping charge cannot be negative')
+      .max(100000)
+      .default(0),
     imageUrls: z
       .array(z.url('Must be a valid URL'))
       .min(1, 'At least one product image URL is required')

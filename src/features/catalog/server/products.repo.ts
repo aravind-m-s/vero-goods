@@ -243,6 +243,8 @@ export interface ProductWriteInput {
   gstRatePercent: number;
   hsnCode?: string;
   paymentSupport: PaymentSupport;
+  /** Delivery charge in paise. Zero means free delivery. */
+  shippingMinor: number;
   imageUrls: string[];
   videoUrls: string[];
   variants: Array<{
@@ -405,6 +407,7 @@ export async function createProduct(input: ProductWriteInput): Promise<Product> 
     gstRatePercent: input.gstRatePercent,
     hsnCode: input.hsnCode,
     paymentSupport: input.paymentSupport,
+    shippingMinor: input.shippingMinor,
     createdAt: now,
     updatedAt: now,
   };
@@ -430,6 +433,7 @@ export async function updateProduct(id: string, input: ProductWriteInput): Promi
         gstRatePercent: input.gstRatePercent,
         hsnCode: input.hsnCode,
         paymentSupport: input.paymentSupport,
+        shippingMinor: input.shippingMinor,
         updatedAt: now,
       },
     },

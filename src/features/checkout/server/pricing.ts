@@ -16,6 +16,10 @@ function envMinor(name: string, fallbackMinor: number): number {
   return Number.isFinite(parsed) ? Math.round(parsed) : fallbackMinor;
 }
 
+/**
+ * Fallback delivery charge, used only for products saved before shipping
+ * became a per-product field. Anything created or edited since carries its own.
+ */
 export const SHIPPING_FLAT_MINOR = () => envMinor('SHIPPING_FLAT_MINOR', 8000);
 export const FREE_SHIPPING_THRESHOLD_MINOR = () =>
   envMinor('FREE_SHIPPING_THRESHOLD_MINOR', 200000);
@@ -28,6 +32,23 @@ export interface PricedLine {
   quantity: number;
   totalMinor: number;
   gstRatePercent: number;
+  /**
+   * The delivery charge set on this line's product, in paise. Absent on
+   * products saved before the field existed — those fall back to the
+   * store-wide flat rate, which is what they were being charged already.
+   */
+  shippingMinor?: number;
+}
+
+/**
+ * One basket is one parcel, so it is charged one delivery fee: the highest any
+ * product in it carries. Adding the charges up would bill a shopper twice for
+ * a single box, and taking the lowest would let a ₹5 item carry a heavy one
+ * for free.
+ */
+function basketShippingMinor(lines: PricedLine[]): number {
+  if (lines.length === 0) return 0;
+  return Math.max(...lines.map((line) => line.shippingMinor ?? SHIPPING_FLAT_MINOR()));
 }
 
 export interface OrderTotals {
@@ -54,10 +75,13 @@ export function calculateTotals(
 ): OrderTotals {
   const subtotalMinor = lines.reduce((sum, line) => sum + line.totalMinor, 0);
 
+  // The free-shipping threshold still overrides the per-product charge: it is a
+  // store-wide promise, and a basket big enough to earn it does not stop
+  // earning it because of what is in it.
   const shippingMinor =
     subtotalMinor >= FREE_SHIPPING_THRESHOLD_MINOR() || subtotalMinor === 0
       ? 0
-      : SHIPPING_FLAT_MINOR();
+      : basketShippingMinor(lines);
 
   const codFeeMinor = paymentMethod === 'COD' ? COD_FEE_MINOR() : 0;
 

@@ -15,6 +15,7 @@ export function toProductWriteInput(
     gstRatePercent: data.gstRatePercent,
     hsnCode: data.hsnCode || undefined,
     paymentSupport: data.paymentSupport,
+    shippingMinor: rupeesToMinor(data.shippingPrice),
     imageUrls: data.imageUrls,
     videoUrls: data.videoUrls,
     variants: data.variants.map((variant) => ({

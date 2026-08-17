@@ -9,6 +9,7 @@ import {
   getActiveProductSlugs,
   getProductBySlug,
 } from '@/features/catalog/server/products.repo';
+import { SHIPPING_FLAT_MINOR } from '@/features/checkout/server/pricing';
 import { Badge } from '@/shared/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { appUrl } from '@/shared/lib/config';
@@ -136,6 +137,7 @@ export default async function ProductDetailPage(props: PageProps<'/products/[slu
           images={images}
           videos={videos}
           variants={variants}
+          shippingMinor={product.shippingMinor ?? SHIPPING_FLAT_MINOR()}
         />
       </div>
 

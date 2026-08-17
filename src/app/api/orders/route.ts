@@ -154,12 +154,17 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Delivery is charged per product, so the line has to carry the product it
+  // came from — the order item snapshot does not keep it.
+  const shippingByProduct = new Map(products.map((product) => [product.id, product.shippingMinor]));
+
   const totals = calculateTotals(
     items.map((item) => ({
       unitPriceMinor: item.unitPriceMinor,
       quantity: item.quantity,
       totalMinor: item.totalMinor,
       gstRatePercent: item.gstRatePercent,
+      shippingMinor: shippingByProduct.get(item.productId),
     })),
     input.paymentMethod
   );
