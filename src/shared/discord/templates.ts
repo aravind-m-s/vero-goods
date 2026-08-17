@@ -62,7 +62,6 @@ function totalsBlock(order: Order): string {
     `Shipping — ${order.shippingMinor === 0 ? 'Free' : formatMinor(order.shippingMinor)}`
   );
   if (order.codFeeMinor > 0) rows.push(`COD fee — ${formatMinor(order.codFeeMinor)}`);
-  rows.push(`Tax included — ${formatMinor(order.taxMinor)}`);
   rows.push(`**Total — ${formatMinor(order.totalMinor)}**`);
   return truncateField(rows.join('\n'));
 }
@@ -89,7 +88,7 @@ export function orderPlacedDiscord(order: Order, items: OrderItem[]): DiscordMes
           { name: 'Email', value: truncateField(order.email || '—'), inline: true },
           { name: 'Delivery address', value: addressBlock(order) },
           { name: `Items (${items.length})`, value: itemLines(items) },
-          { name: 'Totals', value: totalsBlock(order), inline: true },
+          // { name: 'Totals', value: totalsBlock(order), inline: true },
           {
             name: 'Payment',
             value: `${isCod ? 'Cash on delivery' : 'Razorpay'}\n${order.paymentStatus}`,
@@ -99,8 +98,8 @@ export function orderPlacedDiscord(order: Order, items: OrderItem[]): DiscordMes
         footer: {
           text: order.estimatedDeliveryDate
             ? `Est. delivery ${new Date(order.estimatedDeliveryDate).toLocaleDateString('en-IN', {
-                dateStyle: 'medium',
-              })}`
+              dateStyle: 'medium',
+            })}`
             : 'Vero Goods',
         },
         timestamp: order.createdAt,

@@ -27,7 +27,7 @@ const MAX_QTY = 20;
  */
 const QUOTE_DEBOUNCE_MS = 300;
 
-export type PaymentMethod = 'COD' | 'RAZORPAY';
+export type PaymentMethod = 'RAZORPAY' | 'COD';
 
 /**
  * The cart stores identifiers and quantities only.
@@ -234,10 +234,10 @@ export const useCartStore = create<CartState>()(
         set({
           entries: existing
             ? prev.map((entry) =>
-                entry.variantId === variantId
-                  ? { ...entry, quantity: Math.min(MAX_QTY, entry.quantity + quantity) }
-                  : entry
-              )
+              entry.variantId === variantId
+                ? { ...entry, quantity: Math.min(MAX_QTY, entry.quantity + quantity) }
+                : entry
+            )
             : [...prev, { variantId, quantity: Math.min(MAX_QTY, quantity) }],
         });
         scheduleQuote();
