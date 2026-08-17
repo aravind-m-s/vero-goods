@@ -154,6 +154,18 @@ export function ProductForm({
   };
 
   /**
+   * Promotes an image to primary by moving it to the front.
+   *
+   * Order *is* the primary flag — the storefront card, search results, order
+   * lines and the OG image all read the first image — so there is nothing extra
+   * to store, and the choice survives a save without a schema change.
+   */
+  const makePrimary = (url: string) =>
+    setImageUrls((current) =>
+      current.includes(url) ? [url, ...current.filter((item) => item !== url)] : current
+    );
+
+  /**
    * Nested fields (variants, suppliers, specification rows) fail far below the
    * fold, so the summary is what makes a rejected save actionable.
    */
@@ -456,12 +468,19 @@ export function ProductForm({
             <CardContent className="space-y-3">
               <div className="space-y-2">
                 <Label>Images ({imageUrls.length}/10)</Label>
-                <MediaGallery kind="image" urls={imageUrls} onRemove={removeMedia('image')} />
+                <MediaGallery
+                  kind="image"
+                  urls={imageUrls}
+                  onRemove={removeMedia('image')}
+                  onMakePrimary={makePrimary}
+                />
                 {firstErrorFor('imageUrls') && (
                   <p className="text-xs font-medium text-danger">{firstErrorFor('imageUrls')}</p>
                 )}
                 <p className="text-3xs leading-normal text-ink-subtle">
-                  The first image is what the catalogue card and search results show.
+                  The primary image is what the catalogue card, search results and shared links
+                  show. Hit <span className="font-semibold text-ink">Primary</span> on any other
+                  image to promote it.
                 </p>
                 <MediaUploader kind="image" onUploaded={addMedia('image')} />
               </div>
