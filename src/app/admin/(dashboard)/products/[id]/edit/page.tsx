@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { ProductForm } from '@/features/admin/components/ProductForm';
 import { ProductInsightsPanel } from '@/features/admin/components/ProductInsightsPanel';
 import { getProductById } from '@/features/catalog/server/products.repo';
+import { DEFAULT_PAYMENT_SUPPORT } from '@/features/catalog/types';
 import { minorToRupees } from '@/shared/lib/money';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,7 @@ export default async function EditProductPage({
           isActive: product.isActive,
           gstRatePercent: product.gstRatePercent,
           hsnCode: product.hsnCode ?? '',
+          paymentSupport: product.paymentSupport ?? DEFAULT_PAYMENT_SUPPORT,
           imageUrls: images.map((image) => image.url),
           videoUrls: videos.map((video) => video.url),
           variants: variants.map((variant) => ({

@@ -14,7 +14,7 @@ import {
 } from '@/shared/db/collections';
 import { ensureSeeded } from '@/shared/db/seed';
 import type { PriceChange } from '@/features/analytics/types';
-import type { Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant, ProductVideo } from '@/features/catalog/types';
+import type { PaymentSupport, Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant, ProductVideo } from '@/features/catalog/types';
 
 export const PRODUCTS_TAG = 'products';
 
@@ -242,6 +242,7 @@ export interface ProductWriteInput {
   isActive: boolean;
   gstRatePercent: number;
   hsnCode?: string;
+  paymentSupport: PaymentSupport;
   imageUrls: string[];
   videoUrls: string[];
   variants: Array<{
@@ -403,6 +404,7 @@ export async function createProduct(input: ProductWriteInput): Promise<Product> 
     isActive: input.isActive,
     gstRatePercent: input.gstRatePercent,
     hsnCode: input.hsnCode,
+    paymentSupport: input.paymentSupport,
     createdAt: now,
     updatedAt: now,
   };
@@ -427,6 +429,7 @@ export async function updateProduct(id: string, input: ProductWriteInput): Promi
         isActive: input.isActive,
         gstRatePercent: input.gstRatePercent,
         hsnCode: input.hsnCode,
+        paymentSupport: input.paymentSupport,
         updatedAt: now,
       },
     },

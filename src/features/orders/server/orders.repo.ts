@@ -409,6 +409,75 @@ export async function updateOrderStatus(
   return stripId(result);
 }
 
+export class ShipmentNotEditableError extends Error {
+  constructor(orderNumber: string, status: OrderStatus) {
+    super(`Order ${orderNumber} is ${status} and its shipment can no longer be edited`);
+    this.name = 'ShipmentNotEditableError';
+  }
+}
+
+/**
+ * Sets the courier and AWB without moving the order.
+ *
+ * Shipping no longer waits on the tracking number — the courier issues it after
+ * the handover — so this is how it gets attached later. The change is recorded
+ * in the history against whatever status the order is already in, the same way
+ * a payment is, so filling in an AWB never reads as a fulfilment step.
+ *
+ * An empty string clears the field: an AWB typed in wrong has to be removable.
+ */
+export async function updateShipment(
+  orderId: string,
+  input: { trackingNumber?: string; courier?: string; by: string }
+): Promise<Order | null> {
+  const current = await getOrderById(orderId);
+  if (!current) return null;
+
+  if (current.orderStatus === OrderStatus.CANCELLED || current.orderStatus === OrderStatus.RETURNED) {
+    throw new ShipmentNotEditableError(current.orderNumber, current.orderStatus);
+  }
+
+  const now = new Date().toISOString();
+  const set: Record<string, unknown> = { updatedAt: now };
+  const unset: Record<string, ''> = {};
+
+  if (input.trackingNumber !== undefined) {
+    if (input.trackingNumber) set.trackingNumber = input.trackingNumber;
+    else unset.trackingNumber = '';
+  }
+  if (input.courier !== undefined) {
+    if (input.courier) set.courier = input.courier;
+    else unset.courier = '';
+  }
+
+  const note = [
+    input.courier !== undefined ? `courier ${input.courier || 'cleared'}` : null,
+    input.trackingNumber !== undefined ? `AWB ${input.trackingNumber || 'cleared'}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  const orders = await ordersCollection();
+  const result = await orders.findOneAndUpdate(
+    { id: orderId },
+    {
+      $set: set,
+      ...(Object.keys(unset).length > 0 ? { $unset: unset } : {}),
+      $push: {
+        statusHistory: {
+          status: current.orderStatus,
+          at: now,
+          by: input.by,
+          note: `Shipment updated: ${note}`,
+        },
+      },
+    },
+    { returnDocument: 'after' }
+  );
+
+  return stripId(result);
+}
+
 export async function recordRefund(
   orderId: string,
   refundId: string,

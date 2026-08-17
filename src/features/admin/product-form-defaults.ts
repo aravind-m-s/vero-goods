@@ -30,6 +30,7 @@ export function emptyProductForm(): ProductFormInitialValues {
     isActive: true,
     gstRatePercent: 18,
     hsnCode: '',
+    paymentSupport: 'BOTH',
     imageUrls: [],
     videoUrls: [],
     variants: [emptyVariant(0)],

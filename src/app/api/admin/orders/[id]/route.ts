@@ -1,14 +1,22 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { isAdminAuthenticated } from '@/features/auth/server/auth';
-import { getOrderById, getOrderItems } from '@/features/orders/server/orders.repo';
+import {
+  ShipmentNotEditableError,
+  getOrderById,
+  getOrderItems,
+  updateShipment,
+} from '@/features/orders/server/orders.repo';
 import {
   applyAdminStatusChange,
   statusChangeHttpStatus,
 } from '@/features/orders/server/admin-status';
-import { OrderStatus } from '@/features/orders/types';
+import { OrderStatus, type Order } from '@/features/orders/types';
 import { sendEmail } from '@/shared/email/send';
 import { statusUpdateEmail } from '@/shared/email/templates';
-import { OrderStatusUpdateSchema } from '@/features/orders/schemas';
+import {
+  OrderShipmentUpdateSchema,
+  OrderStatusUpdateSchema,
+} from '@/features/orders/schemas';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +76,72 @@ export async function PUT(request: NextRequest, ctx: RouteContext<'/api/admin/or
   if (email) await sendEmail(email);
 
   return NextResponse.json({ success: true, order: result.order });
+}
+
+/**
+ * Courier and AWB only, with no status move.
+ *
+ * Shipping an order no longer requires a tracking number: the courier issues it
+ * after the parcel is handed over, and blocking the status change on it meant
+ * either waiting or typing a placeholder. This is where it lands afterwards.
+ */
+export async function PATCH(request: NextRequest, ctx: RouteContext<'/api/admin/orders/[id]'>) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
+  const { id } = await ctx.params;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  const parsed = OrderShipmentUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Invalid shipment update', details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  const before = await getOrderById(id);
+  if (!before) {
+    return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+  }
+
+  let order: Order | null;
+  try {
+    order = await updateShipment(id, { ...parsed.data, by: 'admin' });
+  } catch (error) {
+    if (error instanceof ShipmentNotEditableError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
+  if (!order) {
+    return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+  }
+
+  // The customer is told only when a dispatched order gains a tracking number
+  // it did not have — that is the mail they are waiting for. Correcting a typo
+  // or naming the courier is not worth an inbox.
+  const isDispatched =
+    order.orderStatus === OrderStatus.SHIPPED ||
+    order.orderStatus === OrderStatus.OUT_FOR_DELIVERY;
+  const trackingChanged = Boolean(order.trackingNumber) && order.trackingNumber !== before.trackingNumber;
+
+  let emailed = false;
+  if (isDispatched && trackingChanged) {
+    const email = statusUpdateEmail(order);
+    if (email) {
+      await sendEmail(email);
+      emailed = true;
+    }
+  }
+
+  return NextResponse.json({ success: true, order, emailed });
 }
 
 /** Customer-initiated cancellation is handled elsewhere; this is the admin path. */

@@ -8,6 +8,7 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
+import { Select } from '@/shared/ui/select';
 import { Textarea } from '@/shared/ui/textarea';
 import { useToast } from '@/shared/ui/toast';
 import { MediaGallery } from '@/features/admin/components/MediaGallery';
@@ -19,6 +20,7 @@ import {
 import { SpecificationBuilder, type SpecSection } from '@/features/admin/components/SpecificationBuilder';
 import { VariantBuilder, type VariantDraft } from '@/features/admin/components/VariantBuilder';
 import { FORM_ERROR_KEY, ProductFormSchema, issuesToFieldErrors } from '@/features/catalog/schemas';
+import type { PaymentSupport } from '@/features/catalog/types';
 
 /**
  * Turns a dotted schema path into something an admin recognises, e.g.
@@ -63,6 +65,7 @@ export interface ProductFormInitialValues {
   isActive: boolean;
   gstRatePercent: number;
   hsnCode?: string;
+  paymentSupport: PaymentSupport;
   imageUrls: string[];
   videoUrls: string[];
   variants: VariantDraft[];
@@ -86,6 +89,7 @@ export function ProductForm({
   const [isActive, setIsActive] = useState(initial.isActive);
   const [gstRatePercent, setGstRatePercent] = useState(String(initial.gstRatePercent));
   const [hsnCode, setHsnCode] = useState(initial.hsnCode ?? '');
+  const [paymentSupport, setPaymentSupport] = useState<PaymentSupport>(initial.paymentSupport);
   const [imageUrls, setImageUrls] = useState<string[]>(initial.imageUrls);
   const [videoUrls, setVideoUrls] = useState<string[]>(initial.videoUrls);
   /**
@@ -197,6 +201,7 @@ export function ProductForm({
       isActive,
       gstRatePercent: Number(gstRatePercent),
       hsnCode: hsnCode || undefined,
+      paymentSupport,
       imageUrls,
       videoUrls,
       variants: variants.map((variant) => ({
@@ -460,6 +465,23 @@ export function ProductForm({
                 />
                 <span className="text-sm font-bold">Visible on the storefront</span>
               </label>
+
+              <div className="space-y-1 border-t border-line pt-4">
+                <Label htmlFor="paymentSupport">Payment methods</Label>
+                <Select
+                  id="paymentSupport"
+                  value={paymentSupport}
+                  onChange={(event) => setPaymentSupport(event.target.value as PaymentSupport)}
+                  error={fieldErrors.paymentSupport}
+                >
+                  <option value="BOTH">Online payment and cash on delivery</option>
+                  <option value="ONLINE">Online payment only</option>
+                  <option value="COD">Cash on delivery only</option>
+                </Select>
+                <p className="text-3xs leading-normal text-ink-subtle">
+                  Checkout offers a method only when every product in the basket accepts it.
+                </p>
+              </div>
 
               <div className="border-t border-line pt-4">
                 <Button type="submit" className="w-full gap-1.5 font-bold" isLoading={isSaving}>
