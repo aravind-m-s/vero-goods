@@ -31,6 +31,7 @@ export function emptyProductForm(): ProductFormInitialValues {
     gstRatePercent: 18,
     hsnCode: '',
     paymentSupport: 'BOTH',
+    shippingPrice: 0,
     imageUrls: [],
     videoUrls: [],
     variants: [emptyVariant(0)],

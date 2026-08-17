@@ -72,6 +72,12 @@ export interface Product {
    */
   paymentSupport?: PaymentSupport;
   /**
+   * What this product costs to deliver, in paise. Zero means free delivery and
+   * is shown as such. Absent on products created before the field existed —
+   * those keep falling back to the store-wide flat rate.
+   */
+  shippingMinor?: number;
+  /**
    * Set when the product is retired, cleared when it is brought back.
    *
    * Distinct from `isActive: false`, which is "off the shelf for now".

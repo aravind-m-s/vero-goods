@@ -20,6 +20,8 @@ interface ProductActionsProps {
   images: ProductImage[];
   videos: ProductVideo[];
   variants: ProductVariant[];
+  /** Delivery charge for this product, in paise. Zero is shown as free. */
+  shippingMinor: number;
 }
 
 const MAX_PER_ORDER = 20;
@@ -30,6 +32,7 @@ export function ProductActions({
   images,
   videos,
   variants,
+  shippingMinor,
 }: ProductActionsProps) {
   const router = useRouter();
   // Actions are stable store references, so this component never re-renders
@@ -135,6 +138,17 @@ export function ProductActions({
               Inclusive of all taxes ·{' '}
               {purchasable ? 'Dispatched in 1–4 working days' : 'Currently unavailable to order'}
             </p>
+            {/* Stated next to the price, where it changes the decision, and not
+                only in the cart where it reads as a surprise. */}
+            {shippingMinor === 0 ? (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-success">
+                <Truck className="h-3.5 w-3.5" /> Free shipping
+              </p>
+            ) : (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
+                <Truck className="h-3.5 w-3.5" /> {formatMinor(shippingMinor)} shipping
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-sm text-ink-muted">
@@ -256,6 +270,20 @@ export function ProductActions({
                   : selected.supplier.leadTimeDays === 0
                     ? 'Same working day'
                     : `In ${selected.supplier.leadTimeDays} working day${selected.supplier.leadTimeDays > 1 ? 's' : ''}`
+              }
+            />
+            <Row
+              label={
+                <span className="flex items-center gap-1.5">
+                  <Truck className="h-3.5 w-3.5" /> Shipping
+                </span>
+              }
+              value={
+                shippingMinor === 0 ? (
+                  <span className="text-success">Free</span>
+                ) : (
+                  formatMinor(shippingMinor)
+                )
               }
             />
             <Row

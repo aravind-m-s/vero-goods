@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
       quantity,
       totalMinor: variant.priceMinor * quantity,
       gstRatePercent: product.gstRatePercent,
+      shippingMinor: product.shippingMinor,
       stockQty: variant.stockQty,
       allowBackorder: variant.allowBackorder,
       inStock: quantity > 0,
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
         quantity: line.quantity,
         totalMinor: line.totalMinor,
         gstRatePercent: line.gstRatePercent,
+        shippingMinor: line.shippingMinor,
       })),
     effectiveMethod
   );

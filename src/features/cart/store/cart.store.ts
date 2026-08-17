@@ -55,6 +55,8 @@ export interface QuoteLine {
   quantity: number;
   totalMinor: number;
   gstRatePercent: number;
+  /** This product's delivery charge, in paise. The basket pays the highest of them. */
+  shippingMinor?: number;
   stockQty: number;
   allowBackorder: boolean;
   inStock: boolean;
