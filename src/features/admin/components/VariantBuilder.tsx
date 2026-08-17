@@ -6,6 +6,7 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
+import { Select } from '@/shared/ui/select';
 import { emptyVariant } from '@/features/admin/product-form-defaults';
 
 /**
@@ -40,13 +41,43 @@ interface VariantBuilderProps {
   onChange: (value: VariantDraft[]) => void;
   /** Validation messages keyed by dotted path, e.g. `variants.0.supplier.sku`. */
   errors?: Record<string, string>;
+  /** Supplier names already in use, offered as the picker's options. */
+  supplierNames?: string[];
 }
 
-export function VariantBuilder({ value, onChange, errors = {} }: VariantBuilderProps) {
+/** Sentinel for "not one of the listed suppliers" — never a stored value. */
+const NEW_SUPPLIER = '__new__';
+
+export function VariantBuilder({
+  value,
+  onChange,
+  errors = {},
+  supplierNames = [],
+}: VariantBuilderProps) {
+  /**
+   * Which variants are typing a supplier rather than picking one. Reset whenever
+   * a variant is removed, since the flags are held by position.
+   */
+  const [typingSupplier, setTypingSupplier] = React.useState<Set<number>>(new Set());
+
   const errorAt = (index: number, field: string) => errors[`variants.${index}.${field}`];
   const update = (index: number, patch: Partial<VariantDraft>) => {
     onChange(value.map((variant, i) => (i === index ? { ...variant, ...patch } : variant)));
   };
+
+  /**
+   * The picker's options: names the store already uses, plus any typed into
+   * this form. Without the second half, a supplier entered on variant 1 would
+   * be missing from variant 2's list until the product had been saved once.
+   */
+  const options = React.useMemo(() => {
+    const names = new Set(supplierNames.filter((name) => name.trim()));
+    for (const variant of value) {
+      const name = variant.supplier.name.trim();
+      if (name) names.add(name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [supplierNames, value]);
 
   const updateSupplier = (index: number, patch: Partial<VariantDraft['supplier']>) => {
     onChange(
@@ -89,6 +120,7 @@ export function VariantBuilder({ value, onChange, errors = {} }: VariantBuilderP
           const hasError = Object.keys(errors).some((path) =>
             path.startsWith(`variants.${index}.`)
           );
+          const isTyping = typingSupplier.has(index);
 
           return (
             <div
@@ -104,7 +136,10 @@ export function VariantBuilder({ value, onChange, errors = {} }: VariantBuilderP
                 {value.length > 1 && (
                   <button
                     type="button"
-                    onClick={() => onChange(value.filter((_, i) => i !== index))}
+                    onClick={() => {
+                      setTypingSupplier(new Set());
+                      onChange(value.filter((_, i) => i !== index));
+                    }}
                     className="p-1 text-ink-subtle hover:text-danger"
                     aria-label={`Remove variant ${index + 1}`}
                   >
@@ -190,12 +225,58 @@ export function VariantBuilder({ value, onChange, errors = {} }: VariantBuilderP
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <FieldBlock label="Supplier name">
-                    <Input
-                      value={variant.supplier.name}
-                      onChange={(event) => updateSupplier(index, { name: event.target.value })}
-                      placeholder="Vero Direct Warehouse"
-                      error={errorAt(index, 'supplier.name')}
-                    />
+                    {/* Picked from the suppliers already in use, so the same
+                        supplier is spelled one way everywhere and the product
+                        and order filters can group on it. A first supplier —
+                        and every later new one — is still typed in. */}
+                    {options.length === 0 || isTyping ? (
+                      <div className="space-y-1.5">
+                        <Input
+                          value={variant.supplier.name}
+                          onChange={(event) => updateSupplier(index, { name: event.target.value })}
+                          placeholder="Vero Direct Warehouse"
+                          error={errorAt(index, 'supplier.name')}
+                          autoFocus={isTyping}
+                        />
+                        {options.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTypingSupplier((current) => {
+                                const next = new Set(current);
+                                next.delete(index);
+                                return next;
+                              });
+                              updateSupplier(index, { name: '' });
+                            }}
+                            className="text-2xs text-ink-subtle underline"
+                          >
+                            Pick an existing supplier instead
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <Select
+                        value={variant.supplier.name}
+                        onChange={(event) => {
+                          if (event.target.value === NEW_SUPPLIER) {
+                            setTypingSupplier((current) => new Set(current).add(index));
+                            updateSupplier(index, { name: '' });
+                            return;
+                          }
+                          updateSupplier(index, { name: event.target.value });
+                        }}
+                        error={errorAt(index, 'supplier.name')}
+                      >
+                        <option value="">Choose a supplier…</option>
+                        {options.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                        <option value={NEW_SUPPLIER}>+ New supplier…</option>
+                      </Select>
+                    )}
                   </FieldBlock>
                   <FieldBlock label="Supplier SKU">
                     <Input

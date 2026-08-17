@@ -39,4 +39,5 @@ export const ExportFilterSchema = z.object({
   status: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
+  supplier: z.string().optional(),
 });

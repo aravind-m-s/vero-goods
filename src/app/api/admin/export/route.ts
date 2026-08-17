@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
     status,
     dateFrom: params.get('dateFrom') ?? undefined,
     dateTo: params.get('dateTo') ?? undefined,
+    supplier: params.get('supplier') ?? undefined,
   };
 
   // Streamed row by row from a Mongo cursor, so exporting 100k orders does not

@@ -175,6 +175,8 @@ export interface AdminProductRow extends Product {
   fromPriceMinor: number;
   costPriceMinor: number;
   imageUrl?: string;
+  /** Every supplier this product is sourced from, one per variant. */
+  supplierNames: string[];
 }
 
 export async function listAdminProducts(): Promise<AdminProductRow[]> {
@@ -207,8 +209,41 @@ export async function listAdminProducts(): Promise<AdminProductRow[]> {
       fromPriceMinor: cheapest?.priceMinor ?? 0,
       costPriceMinor: cheapest?.supplier.costPriceMinor ?? 0,
       imageUrl: images.find((img) => img.productId === product.id)?.url,
+      supplierNames: [
+        ...new Set(
+          pv.map((variant) => variant.supplier?.name).filter((name): name is string => Boolean(name))
+        ),
+      ],
     };
   });
+}
+
+/**
+ * Every supplier name the store has ever used, for the admin's supplier picker
+ * and filters.
+ *
+ * Derived rather than kept in a table of its own: the name already lives on
+ * every variant and on every order line, and a separate list would immediately
+ * disagree with them. Order items are included so a supplier dropped from the
+ * catalogue can still be filtered for in order history.
+ */
+export async function listSupplierNames(): Promise<string[]> {
+  const [variants, orderItems] = await Promise.all([
+    variantsCollection(),
+    orderItemsCollection(),
+  ]);
+
+  const [fromCatalogue, fromOrders] = await Promise.all([
+    variants.distinct('supplier.name'),
+    orderItems.distinct('supplierName'),
+  ]);
+
+  const names = new Set<string>();
+  for (const name of [...fromCatalogue, ...fromOrders]) {
+    if (typeof name === 'string' && name.trim()) names.add(name.trim());
+  }
+
+  return [...names].sort((a, b) => a.localeCompare(b));
 }
 
 export async function getVariantsByIds(variantIds: string[]): Promise<ProductVariant[]> {

@@ -2,7 +2,7 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 import { ProductForm } from '@/features/admin/components/ProductForm';
 import { ProductInsightsPanel } from '@/features/admin/components/ProductInsightsPanel';
-import { getProductById } from '@/features/catalog/server/products.repo';
+import { getProductById, listSupplierNames } from '@/features/catalog/server/products.repo';
 import { DEFAULT_PAYMENT_SUPPORT } from '@/features/catalog/types';
 import { SHIPPING_FLAT_MINOR } from '@/features/checkout/server/pricing';
 import { minorToRupees } from '@/shared/lib/money';
@@ -20,7 +20,7 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const detail = await getProductById(id);
+  const [detail, supplierNames] = await Promise.all([getProductById(id), listSupplierNames()]);
   if (!detail) notFound();
 
   const { product, variants, images, videos, specifications } = detail;
@@ -34,6 +34,7 @@ export default async function EditProductPage({
 
       <ProductForm
         mode="edit"
+        supplierNames={supplierNames}
         initial={{
           id: product.id,
           title: product.title,
