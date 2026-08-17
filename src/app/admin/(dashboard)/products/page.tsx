@@ -56,6 +56,8 @@ interface AdminProductRow {
   fromPriceMinor: number;
   costPriceMinor: number;
   imageUrl?: string;
+  /** One per variant, deduplicated. */
+  supplierNames: string[];
   updatedAt: string;
   /** Present only on retired products. Absent means never archived. */
   archivedAt?: string;
@@ -119,6 +121,7 @@ export default function AdminProductsPage() {
   // meant. They stay one filter away rather than being deleted, because
   // invoices and past orders still resolve through them.
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('LIVE');
+  const [supplierFilter, setSupplierFilter] = useState('ALL');
   const [toArchive, setToArchive] = useState<AdminProductRow | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [toDelete, setToDelete] = useState<AdminProductRow | null>(null);
@@ -155,16 +158,32 @@ export default function AdminProductsPage() {
     };
   }, [error]);
 
+  /**
+   * Suppliers to offer, taken from the products on screen rather than from a
+   * list of their own — the filter can then only offer a supplier that some
+   * product is actually sourced from.
+   */
+  const supplierOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const product of products) {
+      for (const name of product.supplierNames ?? []) names.add(name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     return products.filter((product) => {
       if (!matchesStatus(product, statusFilter)) return false;
+      if (supplierFilter !== 'ALL' && !(product.supplierNames ?? []).includes(supplierFilter)) {
+        return false;
+      }
       if (!term) return true;
       return (
         product.title.toLowerCase().includes(term) || product.slug.toLowerCase().includes(term)
       );
     });
-  }, [products, search, statusFilter]);
+  }, [products, search, statusFilter, supplierFilter]);
 
   const handleToggleActive = async (product: AdminProductRow) => {
     try {
@@ -316,6 +335,22 @@ export default function AdminProductsPage() {
             ))}
           </Select>
         </div>
+        {supplierOptions.length > 0 && (
+          <div className="sm:w-48">
+            <Select
+              value={supplierFilter}
+              onChange={(event) => setSupplierFilter(event.target.value)}
+              aria-label="Filter by supplier"
+            >
+              <option value="ALL">All suppliers</option>
+              {supplierOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* The dashboard shell is `bg-surface-sunken`, so a table with no surface
@@ -390,6 +425,13 @@ export default function AdminProductsPage() {
                           <p className="truncate font-mono text-3xs text-ink-subtle">
                             /{product.slug}
                           </p>
+                          {/* Named on the row so a supplier-filtered list shows
+                              what it is filtered to, not just fewer rows. */}
+                          {(product.supplierNames ?? []).length > 0 && (
+                            <p className="truncate text-3xs text-ink-subtle">
+                              {product.supplierNames.join(', ')}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </TableCell>

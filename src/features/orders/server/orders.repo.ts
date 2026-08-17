@@ -65,17 +65,39 @@ export interface OrderPage {
   total: number;
 }
 
+/**
+ * Order ids that contain a line from this supplier.
+ *
+ * The supplier lives on the order line, not on the order, so filtering by it
+ * means resolving the ids first. `distinct` does that in the database rather
+ * than pulling every line into Node.
+ */
+async function orderIdsForSupplier(supplierName: string): Promise<string[]> {
+  const orderItems = await orderItemsCollection();
+  const ids = await orderItems.distinct('orderId', { supplierName });
+  return ids.filter((id): id is string => typeof id === 'string');
+}
+
 /** Paginated + filtered at the database, not in application memory. */
 export async function listOrders(opts: {
   status?: OrderStatus | 'ALL';
   search?: string;
   dateFrom?: string;
   dateTo?: string;
+  supplier?: string;
   page?: number;
   pageSize?: number;
 }): Promise<OrderPage> {
   const orders = await ordersCollection();
   const filter = buildOrderFilter(opts);
+
+  if (opts.supplier) {
+    const ids = await orderIdsForSupplier(opts.supplier);
+    // No order carries this supplier: answer with nothing rather than with an
+    // unfiltered page, which is what an empty `$in` would have to mean.
+    if (ids.length === 0) return { orders: [], total: 0 };
+    filter.id = { $in: ids };
+  }
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 20));
 
@@ -125,9 +147,20 @@ export async function* iterateOrders(opts: {
   status?: OrderStatus | 'ALL';
   dateFrom?: string;
   dateTo?: string;
+  supplier?: string;
 }): AsyncGenerator<Order> {
   const orders = await ordersCollection();
-  const cursor = orders.find(buildOrderFilter(opts)).sort({ createdAt: -1 });
+  const filter = buildOrderFilter(opts);
+
+  // The export has to agree with the list it was launched from, supplier
+  // filter included.
+  if (opts.supplier) {
+    const ids = await orderIdsForSupplier(opts.supplier);
+    if (ids.length === 0) return;
+    filter.id = { $in: ids };
+  }
+
+  const cursor = orders.find(filter).sort({ createdAt: -1 });
   for await (const doc of cursor) {
     yield stripId(doc) as Order;
   }

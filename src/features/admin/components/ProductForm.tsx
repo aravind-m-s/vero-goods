@@ -77,9 +77,12 @@ export interface ProductFormInitialValues {
 export function ProductForm({
   initial,
   mode,
+  supplierNames = [],
 }: {
   initial: ProductFormInitialValues;
   mode: 'create' | 'edit';
+  /** Supplier names already in use, read on the server and offered as a picker. */
+  supplierNames?: string[];
 }) {
   const router = useRouter();
   const { success, error } = useToast();
@@ -428,7 +431,12 @@ export function ProductForm({
             </CardContent>
           </Card>
 
-          <VariantBuilder value={variants} onChange={setVariants} errors={fieldErrors} />
+          <VariantBuilder
+            value={variants}
+            onChange={setVariants}
+            errors={fieldErrors}
+            supplierNames={supplierNames}
+          />
           {fieldErrors.variants && (
             <p className="text-xs font-medium text-danger">{fieldErrors.variants}</p>
           )}

@@ -80,6 +80,8 @@ export default function AdminOrdersPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('ALL');
+  const [supplierOptions, setSupplierOptions] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -98,9 +100,12 @@ export default function AdminOrdersPage() {
       if (search.trim()) params.set('search', search.trim());
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
+      // Resolved server-side against the order lines — an order carries no
+      // supplier of its own.
+      if (supplierFilter !== 'ALL') params.set('supplier', supplierFilter);
       return params;
     },
-    [statusFilter, search, dateFrom, dateTo]
+    [statusFilter, search, dateFrom, dateTo, supplierFilter]
   );
 
   useEffect(() => {
@@ -142,7 +147,26 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-  }, [statusFilter, search, dateFrom, dateTo]);
+  }, [statusFilter, search, dateFrom, dateTo, supplierFilter]);
+
+  // The supplier list is the same one the product form picks from, so the two
+  // screens can never offer different spellings of the same supplier.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch('/api/admin/suppliers');
+        if (!response.ok) return;
+        const data = (await response.json()) as { suppliers: string[] };
+        if (!cancelled) setSupplierOptions(data.suppliers);
+      } catch {
+        // A missing supplier list only costs the filter; the orders still load.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /**
    * Orders land in PLACED and stay there until a human accepts them — payment
@@ -283,6 +307,7 @@ export default function AdminOrdersPage() {
     setStatusFilter('ALL');
     setDateFrom('');
     setDateTo('');
+    setSupplierFilter('ALL');
   };
 
   const exportUrl = () => {
@@ -290,6 +315,8 @@ export default function AdminOrdersPage() {
     if (statusFilter !== 'ALL') params.set('status', statusFilter);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
+    // The CSV is the list you are looking at, so it carries the same filters.
+    if (supplierFilter !== 'ALL') params.set('supplier', supplierFilter);
     return `/api/admin/export?${params.toString()}`;
   };
 
@@ -313,7 +340,7 @@ export default function AdminOrdersPage() {
         </a>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <div className="relative lg:col-span-2">
           <Search className="absolute left-3 top-3 h-4 w-4 text-ink-subtle" />
           <Input
@@ -333,6 +360,20 @@ export default function AdminOrdersPage() {
         </Select>
         <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        {supplierOptions.length > 0 && (
+          <Select
+            value={supplierFilter}
+            onChange={(event) => setSupplierFilter(event.target.value)}
+            aria-label="Filter by supplier"
+          >
+            <option value="ALL">All suppliers</option>
+            {supplierOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </Select>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -352,7 +393,7 @@ export default function AdminOrdersPage() {
         </span>
       </div>
 
-      {(search || statusFilter !== 'ALL' || dateFrom || dateTo) && (
+      {(search || statusFilter !== 'ALL' || dateFrom || dateTo || supplierFilter !== 'ALL') && (
         <button
           type="button"
           onClick={clearFilters}
