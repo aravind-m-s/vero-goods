@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ExternalLink, Film, ImageOff, X } from 'lucide-react';
+import { ExternalLink, Film, ImageOff, Star, X } from 'lucide-react';
 import { SafeImage as Image } from '@/shared/ui/safe-image';
 import type { UploadKind } from '@/features/admin/components/MediaUploader';
 
@@ -27,10 +27,16 @@ export function MediaGallery({
   kind,
   urls,
   onRemove,
+  onMakePrimary,
 }: {
   kind: UploadKind;
   urls: string[];
   onRemove: (url: string) => void;
+  /**
+   * Promotes an image to first place. Images only — videos have no equivalent,
+   * nothing outside the gallery singles one of them out.
+   */
+  onMakePrimary?: (url: string) => void;
 }) {
   if (urls.length === 0) {
     return (
@@ -72,11 +78,24 @@ export function MediaGallery({
           </div>
 
           {/* The catalogue card and every listing use the first image, so which
-              one is first is a decision, not an ordering detail. */}
-          {index === 0 && (
-            <span className="absolute left-1 top-1 rounded bg-ink/80 px-1.5 py-0.5 text-3xs font-bold text-surface-raised">
-              Primary
+              one is first is a decision, not an ordering detail — and it is made
+              here, by promoting one, rather than by re-uploading in order. */}
+          {index === 0 ? (
+            <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-ink/80 px-1.5 py-0.5 text-3xs font-bold text-surface-raised">
+              <Star className="h-2.5 w-2.5 fill-current" /> Primary
             </span>
+          ) : (
+            onMakePrimary && (
+              <button
+                type="button"
+                onClick={() => onMakePrimary(url)}
+                aria-label={`Make image ${index + 1} the primary image`}
+                title="Make primary"
+                className="absolute left-1 top-1 flex items-center gap-1 rounded bg-surface-raised/90 px-1.5 py-0.5 text-3xs font-semibold text-ink-subtle shadow-card transition-colors hover:bg-ink hover:text-surface-raised"
+              >
+                <Star className="h-2.5 w-2.5" /> Primary
+              </button>
+            )
           )}
 
           <div className="absolute right-1 top-1 flex gap-1">
