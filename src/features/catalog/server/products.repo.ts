@@ -20,8 +20,15 @@ export const PRODUCTS_TAG = 'products';
 
 /** Call after any catalogue mutation so cached storefront reads refresh. */
 export function revalidateCatalogue(): void {
-  // 'max' keeps serving the previous page while the fresh one is generated.
-  revalidateTag(PRODUCTS_TAG, 'max');
+  // `{ expire: 0 }`, not the 'max' profile. 'max' is stale-while-revalidate:
+  // it marks the entry stale and refreshes it in the background, so the first
+  // request after a save is still answered from the old copy — an admin who
+  // changes a price or a shipping charge and reloads the product page sees the
+  // number they just replaced. Expiring immediately makes that next request a
+  // blocking re-read, which is what "I saved it, show it" has to mean.
+  // (`updateTag` would be the idiomatic read-your-own-writes call, but it is
+  // Server-Action-only and every catalogue write here is a Route Handler.)
+  revalidateTag(PRODUCTS_TAG, { expire: 0 });
 
   // `revalidateTag` only marks the *data* caches stale. The storefront routes
   // are prerendered, and their route cache entries survive it — which is how a
