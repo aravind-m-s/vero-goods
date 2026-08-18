@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, HandHeart, Minus, PackageX, Plus, ShieldCheck, ShoppingCart, Truck, Zap } from 'lucide-react';
+import { Check, HandHeart, Info, Minus, PackageX, Plus, ShieldCheck, ShoppingCart, Truck, Zap } from 'lucide-react';
 import { trackCartAdd } from '@/features/analytics/lib/beacon';
 import { useCartStore, useDirectBuyStore } from '@/features/cart/store/cart.store';
 import { ProductMedia } from '@/features/catalog/components/ProductMedia';
@@ -294,6 +294,20 @@ export function ProductActions({
               }
               value="24 hours, Pack opening video required"
             />
+
+            {/* Says the thing plainly without undermining the photos above it.
+                Colour genuinely does drift between supplier batches, and every
+                screen renders it differently — a shopper who was never told
+                that has a fair complaint, and the replacement window is easier
+                to stand behind when the listing said so up front. */}
+            <p className="flex gap-1.5 border-t border-line pt-2.5 text-2xs leading-relaxed text-ink-subtle">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                Photos show the product as we received it. Shade, finish and small details can
+                vary between batches, and colours render differently from screen to screen — expect
+                a close match rather than an exact one.
+              </span>
+            </p>
           </dl>
         )}
       </div>
