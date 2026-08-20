@@ -15,6 +15,7 @@ import {
 import { ensureSeeded } from '@/shared/db/seed';
 import type { PriceChange } from '@/features/analytics/types';
 import type { PaymentSupport, Product, ProductImage, ProductSpecification, ProductSpecificationRow, ProductVariant, ProductVideo } from '@/features/catalog/types';
+import { videoPosterUrl } from '@/shared/lib/video-poster';
 
 export const PRODUCTS_TAG = 'products';
 
@@ -144,7 +145,12 @@ async function loadProductDetail(
     product,
     variants: stripIds(variants),
     images: stripIds(images),
-    videos: stripIds(videos),
+    // Posters are derived on read, not stored, so videos saved before this
+    // existed get one too.
+    videos: stripIds(videos).map((video) => ({
+      ...video,
+      thumbnailUrl: video.thumbnailUrl ?? videoPosterUrl(video.url),
+    })),
     specifications: stripIds(specifications).map((spec) => ({
       ...spec,
       rows: stripIds(rows.filter((r) => r.specificationId === spec.id)),
