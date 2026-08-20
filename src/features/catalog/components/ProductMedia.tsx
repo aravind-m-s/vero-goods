@@ -100,6 +100,8 @@ export function ProductMedia({
   ];
 
   const [activeIndex, setActiveIndex] = useState(0);
+  /** Where a horizontal drag started, so touchend can measure how far it went. */
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
   /**
    * Autoplay is earned by a tap on a thumbnail, never granted on load.
    *
@@ -112,9 +114,47 @@ export function ProductMedia({
   const videoRef = useRef<HTMLVideoElement>(null);
   const active = items[activeIndex];
 
+  /**
+   * Wraps, so the gallery is a ring rather than a line.
+   *
+   * A shopper at the last item who swipes on is asking for more media, and the
+   * only more there is starts again at the first.
+   */
   const showItem = (index: number) => {
-    setActiveIndex(index);
+    if (items.length === 0) return;
+    setActiveIndex(((index % items.length) + items.length) % items.length);
     setAutoplay(true);
+  };
+
+  /**
+   * Swipe, distinguished from a scroll.
+   *
+   * The gesture only counts once it has travelled far enough to be deliberate
+   * and is more horizontal than vertical — otherwise a shopper flicking down
+   * the page would change the media out from under themselves. A cross-origin
+   * embed swallows its own touches, so while a YouTube or Vimeo video holds the
+   * stage the thumbnails are the way out of it.
+   */
+  const SWIPE_THRESHOLD_PX = 50;
+
+  const onTouchStart = (event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    swipeStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+
+  const onTouchEnd = (event: React.TouchEvent) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start || items.length < 2) return;
+
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+
+    showItem(activeIndex + (deltaX < 0 ? 1 : -1));
   };
 
   /**
@@ -138,7 +178,11 @@ export function ProductMedia({
 
   return (
     <div className="space-y-3">
-      <div className="relative aspect-square w-full overflow-hidden rounded-card border border-line bg-surface-raised">
+      <div
+        className="relative aspect-square w-full touch-pan-y overflow-hidden rounded-card border border-line bg-surface-raised"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
         {!active ? (
           <div className="flex h-full items-center justify-center text-xs text-ink-subtle">
             No media
@@ -221,7 +265,7 @@ export function ProductMedia({
         <p className="flex items-center gap-1.5 text-2xs text-ink-subtle">
           <Play className="h-3 w-3" />
           {videos.length} product video{videos.length === 1 ? '' : 's'}
-          {images.length > 0 && ' · scroll the thumbnails'}
+          {images.length > 0 && ' · swipe the gallery or tap a thumbnail'}
         </p>
       )}
 
