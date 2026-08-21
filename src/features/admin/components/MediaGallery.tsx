@@ -96,9 +96,6 @@ export function MediaGallery({
         <li
           key={url}
           className={cn('group', dragIndex === index && 'opacity-40')}
-          draggable={Boolean(onReorder)}
-          onDragStart={() => setDragIndex(index)}
-          onDragEnd={() => setDragIndex(null)}
           onDragOver={(event) => {
             // Only a tile in flight makes this a drop target; without the
             // preventDefault the browser refuses the drop outright.
@@ -113,60 +110,67 @@ export function MediaGallery({
           {/* The badges and buttons below are positioned against this box, not
               the list item, so an alt-text field underneath does not drag the
               reorder arrows down with it. */}
-          <div className="relative">
           <div
-            className={cn(
-              'relative aspect-square overflow-hidden rounded-control border border-line bg-surface-sunken',
-              onReorder && 'cursor-grab active:cursor-grabbing'
-            )}
+            className="relative"
+            // Only the picture is the drag handle. With the whole tile draggable,
+            // selecting text in the alt-text field below started a reorder instead.
+            draggable={Boolean(onReorder)}
+            onDragStart={() => setDragIndex(index)}
+            onDragEnd={() => setDragIndex(null)}
           >
-            <Image src={url} alt="" fill sizes="180px" className="object-cover" />
-          </div>
-
-          {/* The catalogue card and every listing use the first image, so which
-              one is first is a decision, not an ordering detail — and it is made
-              here, by promoting one, rather than by re-uploading in order. */}
-          {index === 0 ? (
-            <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-ink/80 px-1.5 py-0.5 text-3xs font-bold text-surface-raised">
-              <Star className="h-2.5 w-2.5 fill-current" /> Primary
-            </span>
-          ) : (
-            onMakePrimary && (
-              <button
-                type="button"
-                onClick={() => onMakePrimary(url)}
-                aria-label={`Make image ${index + 1} the primary image`}
-                title="Make primary"
-                className="absolute left-1 top-1 flex cursor-pointer items-center gap-1 rounded bg-surface-raised/90 px-1.5 py-0.5 text-3xs font-semibold text-ink-subtle shadow-card transition-colors hover:bg-ink hover:text-surface-raised"
-              >
-                <Star className="h-2.5 w-2.5" /> Primary
-              </button>
-            )
-          )}
-
-          <div className="absolute right-1 top-1 flex gap-1">
-            <PreviewLink url={url} label={`Preview image ${index + 1}`} />
-            <RemoveButton onClick={() => onRemove(url)} label={`Remove image ${index + 1}`} />
-          </div>
-
-          {/* Dragging is the quick way; these are the way that works from a
-              keyboard, and on a touchscreen, where HTML drag events never fire. */}
-          {onReorder && urls.length > 1 && (
-            <div className="absolute inset-x-1 bottom-1 flex justify-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-              <MoveButton
-                icon={ArrowLeft}
-                disabled={index === 0}
-                onClick={() => onReorder(index, index - 1)}
-                label={`Move image ${index + 1} earlier`}
-              />
-              <MoveButton
-                icon={ArrowRight}
-                disabled={index === urls.length - 1}
-                onClick={() => onReorder(index, index + 1)}
-                label={`Move image ${index + 1} later`}
-              />
+            <div
+              className={cn(
+                'relative aspect-square overflow-hidden rounded-control border border-line bg-surface-sunken',
+                onReorder && 'cursor-grab active:cursor-grabbing'
+              )}
+            >
+              <Image src={url} alt="" fill sizes="180px" className="object-cover" />
             </div>
-          )}
+
+            {/* The catalogue card and every listing use the first image, so which
+                one is first is a decision, not an ordering detail — and it is made
+                here, by promoting one, rather than by re-uploading in order. */}
+            {index === 0 ? (
+              <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-ink/80 px-1.5 py-0.5 text-3xs font-bold text-surface-raised">
+                <Star className="h-2.5 w-2.5 fill-current" /> Primary
+              </span>
+            ) : (
+              onMakePrimary && (
+                <button
+                  type="button"
+                  onClick={() => onMakePrimary(url)}
+                  aria-label={`Make image ${index + 1} the primary image`}
+                  title="Make primary"
+                  className="absolute left-1 top-1 flex cursor-pointer items-center gap-1 rounded bg-surface-raised/90 px-1.5 py-0.5 text-3xs font-semibold text-ink-subtle shadow-card transition-colors hover:bg-ink hover:text-surface-raised"
+                >
+                  <Star className="h-2.5 w-2.5" /> Primary
+                </button>
+              )
+            )}
+
+            <div className="absolute right-1 top-1 flex gap-1">
+              <PreviewLink url={url} label={`Preview image ${index + 1}`} />
+              <RemoveButton onClick={() => onRemove(url)} label={`Remove image ${index + 1}`} />
+            </div>
+
+            {/* Dragging is the quick way; these are the way that works from a
+                keyboard, and on a touchscreen, where HTML drag events never fire. */}
+            {onReorder && urls.length > 1 && (
+              <div className="absolute inset-x-1 bottom-1 flex justify-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                <MoveButton
+                  icon={ArrowLeft}
+                  disabled={index === 0}
+                  onClick={() => onReorder(index, index - 1)}
+                  label={`Move image ${index + 1} earlier`}
+                />
+                <MoveButton
+                  icon={ArrowRight}
+                  disabled={index === urls.length - 1}
+                  onClick={() => onReorder(index, index + 1)}
+                  label={`Move image ${index + 1} later`}
+                />
+              </div>
+            )}
           </div>
 
           {onAltChange && (
