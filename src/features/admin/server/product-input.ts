@@ -17,6 +17,7 @@ export function toProductWriteInput(
     paymentSupport: data.paymentSupport,
     shippingMinor: rupeesToMinor(data.shippingPrice),
     imageUrls: data.imageUrls,
+    imageAlts: data.imageAlts,
     videoUrls: data.videoUrls,
     variants: data.variants.map((variant) => ({
       id: variant.id,

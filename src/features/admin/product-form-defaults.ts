@@ -33,6 +33,7 @@ export function emptyProductForm(): ProductFormInitialValues {
     paymentSupport: 'BOTH',
     shippingPrice: 0,
     imageUrls: [],
+    imageAlts: {},
     videoUrls: [],
     variants: [emptyVariant(0)],
     specifications: [],

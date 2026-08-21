@@ -67,6 +67,16 @@ export const ProductFormSchema = z
       .array(z.url('Must be a valid URL'))
       .min(1, 'At least one product image URL is required')
       .max(10),
+    /**
+     * Alt text per image, keyed by image URL rather than by position.
+     *
+     * Position would have to be kept in step with every reorder, promote and
+     * remove the gallery offers; a URL is already unique within a product and
+     * survives all three. Missing or blank entries fall back to the product
+     * title at write time, so an admin who fills none is no worse off than
+     * before this field existed.
+     */
+    imageAlts: z.record(z.string(), z.string().max(160)).default({}),
     /** Direct mp4/webm files or YouTube/Vimeo links. Optional. */
     videoUrls: z.array(z.url('Must be a valid URL')).max(6).default([]),
     variants: z.array(VariantSchema).min(1, 'At least one variant is required').max(50),
