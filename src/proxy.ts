@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ADMIN_COOKIE_NAME, verifySessionValue } from '@/features/auth/server/session';
 import { applySecurityHeaders } from '@/shared/lib/security-headers';
+import { isIndexable } from '@/shared/lib/config';
 
 const NOINDEX = 'noindex, nofollow, noarchive';
 
@@ -28,11 +29,13 @@ export async function proxy(request: NextRequest) {
 
   const response = NextResponse.next();
 
-  // Keep the admin portal out of search results. Sent as a header rather than a
-  // <meta> tag because the admin layouts are client components (which cannot
-  // export metadata), and because a header also covers the redirect above and
-  // any non-HTML response under /admin.
-  if (pathname.startsWith('/admin')) {
+  // Keep the admin portal out of search results, and the whole dev deployment
+  // with it. Sent as a header rather than a <meta> tag because the admin layouts
+  // are client components (which cannot export metadata), because a header also
+  // covers the redirect above and any non-HTML response, and because this is the
+  // signal that removes a URL already in the index — robots.txt only stops the
+  // next crawl.
+  if (!isIndexable() || pathname.startsWith('/admin')) {
     response.headers.set('X-Robots-Tag', NOINDEX);
   }
 

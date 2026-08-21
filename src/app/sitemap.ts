@@ -1,10 +1,14 @@
 import type { MetadataRoute } from 'next';
-import { appUrl } from '@/shared/lib/config';
+import { appUrl, isIndexable } from '@/shared/lib/config';
 import { getActiveProductSlugs } from '@/features/catalog/server/products.repo';
 
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // Only production publishes a sitemap. The dev server would otherwise hand a
+  // crawler a full list of its own product URLs to index.
+  if (!isIndexable()) return [];
+
   const base = appUrl();
   const products = await getActiveProductSlugs();
 
