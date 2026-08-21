@@ -69,6 +69,8 @@ export interface ProductFormInitialValues {
   /** Delivery charge in rupees. */
   shippingPrice: number;
   imageUrls: string[];
+  /** Alt text per image URL; absent keys mean the image has none yet. */
+  imageAlts: Record<string, string>;
   videoUrls: string[];
   variants: VariantDraft[];
   specifications: SpecSection[];
@@ -97,6 +99,12 @@ export function ProductForm({
   const [paymentSupport, setPaymentSupport] = useState<PaymentSupport>(initial.paymentSupport);
   const [shippingPrice, setShippingPrice] = useState(String(initial.shippingPrice));
   const [imageUrls, setImageUrls] = useState<string[]>(initial.imageUrls);
+  /**
+   * Keyed by URL, not by position: `makePrimary` and `moveImage` rewrite the
+   * order of `imageUrls` freely, and a parallel array would have to be kept in
+   * step with each of them or silently hand one image another's description.
+   */
+  const [imageAlts, setImageAlts] = useState<Record<string, string>>(initial.imageAlts);
   const [videoUrls, setVideoUrls] = useState<string[]>(initial.videoUrls);
   /**
    * Media that belonged to the saved product and has been removed here.
@@ -143,6 +151,10 @@ export function ProductForm({
     (kind === 'image' ? setImageUrls : setVideoUrls)((current) =>
       current.filter((item) => item !== url)
     );
+
+    if (kind === 'image') {
+      setImageAlts(({ [url]: _removed, ...rest }) => rest);
+    }
 
     if (savedMedia.has(url)) {
       setPendingDeletions((current) =>
@@ -239,6 +251,11 @@ export function ProductForm({
       // An emptied field is free delivery, not a broken number.
       shippingPrice: shippingPrice === '' ? 0 : Number(shippingPrice),
       imageUrls,
+      // Only what is still attached: a removed image's text would otherwise
+      // ride along and be stored against a URL the product no longer has.
+      imageAlts: Object.fromEntries(
+        imageUrls.map((url) => [url, imageAlts[url]?.trim() ?? '']).filter(([, alt]) => alt !== '')
+      ),
       videoUrls,
       variants: variants.map((variant) => ({
         ...variant,
@@ -487,6 +504,10 @@ export function ProductForm({
                 <MediaGallery
                   kind="image"
                   urls={imageUrls}
+                  alts={imageAlts}
+                  onAltChange={(url, value) =>
+                    setImageAlts((current) => ({ ...current, [url]: value }))
+                  }
                   onRemove={removeMedia('image')}
                   onMakePrimary={makePrimary}
                   onReorder={moveImage}
@@ -498,7 +519,9 @@ export function ProductForm({
                   The primary image is what the catalogue card, search results and shared links
                   show. Hit <span className="font-semibold text-ink">Primary</span> on any other
                   image to promote it. Drag a tile, or use its arrows, to set the order the
-                  product gallery shows them in.
+                  product gallery shows them in. Describe what each photograph actually shows in
+                  its alt box — image search treats identical text on every angle as one picture.
+                  Left blank, an image falls back to the product title.
                 </p>
                 <MediaUploader kind="image" onUploaded={addMedia('image')} />
               </div>

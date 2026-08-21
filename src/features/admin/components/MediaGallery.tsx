@@ -28,12 +28,21 @@ function fileNameOf(url: string): string {
 export function MediaGallery({
   kind,
   urls,
+  alts,
+  onAltChange,
   onRemove,
   onMakePrimary,
   onReorder,
 }: {
   kind: UploadKind;
   urls: string[];
+  /** Alt text per image URL. Keyed by URL so reordering cannot shuffle it. */
+  alts?: Record<string, string>;
+  /**
+   * Editing alt text turns the gallery from a picker into a form field. Passed
+   * only for images; a video's alternative is its title, set elsewhere.
+   */
+  onAltChange?: (url: string, value: string) => void;
   onRemove: (url: string) => void;
   /**
    * Promotes an image to first place. Images only — videos have no equivalent,
@@ -80,11 +89,13 @@ export function MediaGallery({
   }
 
   return (
-    <ul className="grid grid-cols-3 gap-2">
+    // Two columns when each tile also carries an alt-text field: three leaves
+    // the input too narrow to read what has been typed into it.
+    <ul className={cn('grid gap-2', onAltChange ? 'grid-cols-2' : 'grid-cols-3')}>
       {urls.map((url, index) => (
         <li
           key={url}
-          className={cn('group relative', dragIndex === index && 'opacity-40')}
+          className={cn('group', dragIndex === index && 'opacity-40')}
           draggable={Boolean(onReorder)}
           onDragStart={() => setDragIndex(index)}
           onDragEnd={() => setDragIndex(null)}
@@ -99,13 +110,17 @@ export function MediaGallery({
             setDragIndex(null);
           }}
         >
+          {/* The badges and buttons below are positioned against this box, not
+              the list item, so an alt-text field underneath does not drag the
+              reorder arrows down with it. */}
+          <div className="relative">
           <div
             className={cn(
               'relative aspect-square overflow-hidden rounded-control border border-line bg-surface-sunken',
               onReorder && 'cursor-grab active:cursor-grabbing'
             )}
           >
-            <Image src={url} alt="" fill sizes="120px" className="object-cover" />
+            <Image src={url} alt="" fill sizes="180px" className="object-cover" />
           </div>
 
           {/* The catalogue card and every listing use the first image, so which
@@ -151,6 +166,19 @@ export function MediaGallery({
                 label={`Move image ${index + 1} later`}
               />
             </div>
+          )}
+          </div>
+
+          {onAltChange && (
+            <input
+              type="text"
+              value={alts?.[url] ?? ''}
+              onChange={(event) => onAltChange(url, event.target.value)}
+              maxLength={160}
+              aria-label={`Alt text for image ${index + 1}`}
+              placeholder={index === 0 ? 'Alt text (front of pack)' : 'Alt text (this angle)'}
+              className="mt-1 w-full rounded-control border border-line bg-surface-raised px-2 py-1 text-3xs text-ink outline-none placeholder:text-ink-subtle focus:border-accent"
+            />
           )}
         </li>
       ))}

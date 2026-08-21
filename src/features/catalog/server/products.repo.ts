@@ -182,6 +182,52 @@ export const getActiveProductSlugs = unstable_cache(
   { tags: [PRODUCTS_TAG], revalidate: 3600 }
 );
 
+/**
+ * Every active product with its image URLs, for the sitemap.
+ *
+ * Separate from `getActiveProductSlugs` because that one also feeds
+ * `generateStaticParams`, which has no use for imagery. Google Images
+ * discovers pictures by crawling the page, and a `<image:image>` entry per
+ * product URL is the one place a store can hand it the whole gallery instead.
+ * Cloudinary source URLs are listed, not `/_next/image` variants: the origin
+ * URL is what Google treats as canonical for an image.
+ */
+export const getSitemapProducts = unstable_cache(
+  async (): Promise<Array<{ slug: string; updatedAt: string; imageUrls: string[] }>> => {
+    await ensureSeeded();
+    const [products, imagesCol] = await Promise.all([
+      productsCollection(),
+      productImagesCollection(),
+    ]);
+    const docs = await products
+      .find({ isActive: true }, { projection: { id: 1, slug: 1, updatedAt: 1, _id: 0 } })
+      .toArray();
+
+    const images = await imagesCol
+      .find(
+        { productId: { $in: docs.map((d) => d.id as string) } },
+        { projection: { productId: 1, url: 1, sortOrder: 1, _id: 0 } }
+      )
+      .sort({ sortOrder: 1 })
+      .toArray();
+
+    const byProduct = new Map<string, string[]>();
+    for (const image of images) {
+      const bucket = byProduct.get(image.productId as string) ?? [];
+      bucket.push(image.url as string);
+      byProduct.set(image.productId as string, bucket);
+    }
+
+    return docs.map((d) => ({
+      slug: d.slug as string,
+      updatedAt: d.updatedAt as string,
+      imageUrls: byProduct.get(d.id as string) ?? [],
+    }));
+  },
+  ['sitemap-products'],
+  { tags: [PRODUCTS_TAG], revalidate: 3600 }
+);
+
 export interface AdminProductRow extends Product {
   variantCount: number;
   totalStock: number;
@@ -294,6 +340,8 @@ export interface ProductWriteInput {
   /** Delivery charge in paise. Zero means free delivery. */
   shippingMinor: number;
   imageUrls: string[];
+  /** Alt text per image URL. Blank or absent falls back to the product title. */
+  imageAlts?: Record<string, string>;
   videoUrls: string[];
   variants: Array<{
     id?: string;
@@ -396,7 +444,10 @@ async function writeChildren(productId: string, input: ProductWriteInput): Promi
         id: newId('img'),
         productId,
         url,
-        alt: input.title,
+        // The title is a fallback, not the intent: identical alt text on every
+        // photograph of one product tells image search they are the same
+        // picture. Per-image text is what distinguishes the angles.
+        alt: input.imageAlts?.[url]?.trim() || input.title,
         sortOrder: index,
       }))
     );
