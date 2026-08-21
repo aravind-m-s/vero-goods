@@ -36,6 +36,11 @@ export async function GET(_request: NextRequest, ctx: RouteContext<'/api/admin/p
     product: {
       ...detail.product,
       imageUrls: detail.images.map((image) => image.url),
+      imageAlts: Object.fromEntries(
+        detail.images
+          .filter((image) => image.alt && image.alt !== detail.product.title)
+          .map((image) => [image.url, image.alt as string])
+      ),
       videoUrls: detail.videos.map((video) => video.url),
       variants: detail.variants.map((variant) => ({
         id: variant.id,

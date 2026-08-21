@@ -48,6 +48,15 @@ export default async function EditProductPage({
           // it is actually being charged today, not a zero it never had.
           shippingPrice: minorToRupees(product.shippingMinor ?? SHIPPING_FLAT_MINOR()),
           imageUrls: images.map((image) => image.url),
+          // Alt text that is merely the product title is what every image got
+          // before this field existed. Showing it back would present a default
+          // as a decision; leaving the box empty asks for the real description,
+          // and saving it empty still writes the same title fallback.
+          imageAlts: Object.fromEntries(
+            images
+              .filter((image) => image.alt && image.alt !== product.title)
+              .map((image) => [image.url, image.alt as string])
+          ),
           videoUrls: videos.map((video) => video.url),
           variants: variants.map((variant) => ({
             id: variant.id,
