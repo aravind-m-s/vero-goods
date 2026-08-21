@@ -111,8 +111,15 @@ export function ProductMedia({
    * a thumbnail, playing what they picked is the whole point.
    */
   const [autoplay, setAutoplay] = useState(false);
+  /**
+   * Off only for the wrap from the last item back to the first.
+   *
+   * The track is one long strip, so animating that particular move would sweep
+   * every item in the gallery past the shopper backwards. Wrapping snaps; every
+   * neighbour-to-neighbour move slides.
+   */
+  const [animate, setAnimate] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const active = items[activeIndex];
 
   /**
    * Wraps, so the gallery is a ring rather than a line.
@@ -122,7 +129,15 @@ export function ProductMedia({
    */
   const showItem = (index: number) => {
     if (items.length === 0) return;
-    setActiveIndex(((index % items.length) + items.length) % items.length);
+    const next = ((index % items.length) + items.length) % items.length;
+
+    if (Math.abs(next - activeIndex) > 1) {
+      // Two frames: one to paint the jump untransitioned, one to arm the next.
+      setAnimate(false);
+      requestAnimationFrame(() => requestAnimationFrame(() => setAnimate(true)));
+    }
+
+    setActiveIndex(next);
     setAutoplay(true);
   };
 
@@ -183,42 +198,75 @@ export function ProductMedia({
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {!active ? (
+        {items.length === 0 ? (
           <div className="flex h-full items-center justify-center text-xs text-ink-subtle">
             No media
           </div>
-        ) : active.kind === 'image' ? (
-          <Image
-            src={active.url}
-            alt={active.alt}
-            fill
-            sizes="(min-width: 1024px) 50vw, 100vw"
-            className="object-cover"
-            // The first image is the LCP element on this page.
-            priority={activeIndex === 0}
-          />
-        ) : active.embedUrl ? (
-          <iframe
-            key={active.id}
-            src={autoplay ? withAutoplay(active.embedUrl) : active.embedUrl}
-            title={active.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="h-full w-full border-0"
-          />
         ) : (
-          <video
-            key={active.id}
-            ref={videoRef}
-            src={active.url}
-            poster={active.poster}
-            controls
-            playsInline
-            preload="metadata"
-            className="h-full w-full bg-black object-contain"
+          <div
+            className={cn(
+              'flex h-full w-full',
+              animate && 'transition-transform duration-300 ease-out'
+            )}
+            style={{ transform: `translateX(-${activeIndex * 100}%)` }}
           >
-            Your browser cannot play this video.
-          </video>
+            {items.map((item, index) => {
+              const isActive = index === activeIndex;
+
+              return (
+                <div key={item.id} className="relative h-full w-full shrink-0">
+                  {item.kind === 'image' ? (
+                    <Image
+                      src={item.url}
+                      alt={item.alt}
+                      fill
+                      sizes="(min-width: 1024px) 50vw, 100vw"
+                      className="object-cover"
+                      // The first image is the LCP element on this page.
+                      priority={index === 0}
+                    />
+                  ) : !isActive ? (
+                    /**
+                     * A player only exists while its slide is the stage.
+                     *
+                     * Mounting every video would have the gallery fetch each
+                     * embed on load, and sliding away from one would leave it
+                     * playing off-screen — unmounting is what stops it, since a
+                     * cross-origin frame takes no instruction from this page.
+                     */
+                    <span className="flex h-full w-full items-center justify-center bg-surface-sunken">
+                      {item.poster && (
+                        <Image src={item.poster} alt="" fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
+                      )}
+                      <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-black/45">
+                        <Play className="h-5 w-5 text-white" />
+                      </span>
+                    </span>
+                  ) : item.embedUrl ? (
+                    <iframe
+                      src={autoplay ? withAutoplay(item.embedUrl) : item.embedUrl}
+                      title={item.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="h-full w-full border-0"
+                    />
+                  ) : (
+                    <video
+                      ref={videoRef}
+                      src={item.url}
+                      poster={item.poster}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="h-full w-full bg-black object-contain"
+                    >
+                      Your browser cannot play this video.
+                    </video>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
 
         {badge && <div className="absolute left-4 top-4 flex flex-wrap gap-2">{badge}</div>}

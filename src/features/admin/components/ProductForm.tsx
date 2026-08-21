@@ -166,6 +166,22 @@ export function ProductForm({
     );
 
   /**
+   * Reorders images by dropping one into another's place.
+   *
+   * Same reasoning as `makePrimary`, applied past first place: the gallery
+   * shows images in stored order, so "which one is second" is an editorial
+   * choice and re-uploading in sequence was the only way to make it.
+   */
+  const moveImage = (from: number, to: number) =>
+    setImageUrls((current) => {
+      if (from === to || to < 0 || to >= current.length) return current;
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+
+  /**
    * Nested fields (variants, suppliers, specification rows) fail far below the
    * fold, so the summary is what makes a rejected save actionable.
    */
@@ -473,6 +489,7 @@ export function ProductForm({
                   urls={imageUrls}
                   onRemove={removeMedia('image')}
                   onMakePrimary={makePrimary}
+                  onReorder={moveImage}
                 />
                 {firstErrorFor('imageUrls') && (
                   <p className="text-xs font-medium text-danger">{firstErrorFor('imageUrls')}</p>
@@ -480,7 +497,8 @@ export function ProductForm({
                 <p className="text-3xs leading-normal text-ink-subtle">
                   The primary image is what the catalogue card, search results and shared links
                   show. Hit <span className="font-semibold text-ink">Primary</span> on any other
-                  image to promote it.
+                  image to promote it. Drag a tile, or use its arrows, to set the order the
+                  product gallery shows them in.
                 </p>
                 <MediaUploader kind="image" onUploaded={addMedia('image')} />
               </div>

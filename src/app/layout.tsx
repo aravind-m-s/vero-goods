@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import '@/shared/styles/globals.css';
-import { appUrl } from '@/shared/lib/config';
+import { appUrl, isIndexable } from '@/shared/lib/config';
 import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { THEME_INIT_SCRIPT } from '@/shared/theme/theme';
 import Clarity from '@/shared/ui/clarity';
@@ -46,6 +46,11 @@ export const metadata: Metadata = {
     locale: 'en_IN',
   },
   twitter: { card: 'summary_large_image' },
+  // Belt and braces over the `X-Robots-Tag` proxy.ts sends: the proxy matcher
+  // skips static assets, and a <meta> tag is what a crawler sees when the page
+  // is served straight from the CDN cache. Only the production origin is
+  // indexable — every other deployment renders noindex sitewide.
+  robots: isIndexable() ? undefined : { index: false, follow: false },
 };
 
 // Tints the browser chrome (Android address bar, iOS PWA header) to match the

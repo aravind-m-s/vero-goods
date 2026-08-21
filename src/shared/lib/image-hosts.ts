@@ -22,6 +22,8 @@ export const ALLOWED_IMAGE_HOSTS = [
   'cdn.shopify.com',
   'ik.imagekit.io',
   'lh3.googleusercontent.com',
+  // YouTube's thumbnail CDN, for posters derived by `videoPosterUrl`.
+  'i.ytimg.com',
 ] as const;
 
 export function isAllowedImageHost(url: string): boolean {
