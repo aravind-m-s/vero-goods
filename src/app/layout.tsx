@@ -5,6 +5,7 @@ import { appUrl, isIndexable } from '@/shared/lib/config';
 import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { THEME_INIT_SCRIPT } from '@/shared/theme/theme';
 import Clarity from '@/shared/ui/clarity';
+import { MetaPixel } from '@/shared/ui/Metapixel';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -84,8 +85,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col bg-surface-sunken text-ink">
-        <ThemeProvider>{children}</ThemeProvider>
         <Clarity />
+        <MetaPixel />
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
